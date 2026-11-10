@@ -22,6 +22,7 @@ const I = {
   minus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12h14"/></svg>',
   more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>',
   close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  collapse: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>',
   expand: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>',
   back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4l-8 8 8 8"/></svg>',
   play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.6-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z"/></svg>',
@@ -454,11 +455,9 @@ function heroHTML(r) {
       ${poster ? `<img class="poster" src="${esc(poster)}" alt="">` : ""}
       <video id="vid" playsinline webkit-playsinline preload="none" ${poster ? `poster="${esc(poster)}"` : ""} src="${esc(r.video_url)}"></video>
       <div class="top-fade"></div><div class="fade"></div>
-      <button class="play-btn glass press" id="play" aria-label="Play video">${I.play}</button>
-      ${dur ? `<div class="duration">${dur}</div>` : ""}
       <div class="pull-hint" id="pullhint">${I.expand}<span>Pull for full screen</span></div>
-      <button class="icon-btn glass press imm-close" id="immclose" aria-label="Close full screen">${I.close}</button>
       <div class="video-ui"><div class="scrub" id="scrub"><div class="scrub-track"><div class="scrub-fill" id="fill"></div></div></div>
+        ${dur ? `<span class="vid-time" id="vtime">${dur}</span>` : ""}
         <button class="icon-btn glass press" id="full" aria-label="Full screen">${I.expand}</button>
         <button class="icon-btn glass press" id="mute" aria-label="Mute">${I.soundOn}</button></div>
     </div>`;
@@ -651,20 +650,24 @@ function bindDetail(r) {
 
 // ------------------------------------------------------------------ video
 function setupVideo() {
-  const hero = $("#hero"), vid = $("#vid"), play = $("#play"), mute = $("#mute"), fill = $("#fill"), scrub = $("#scrub");
-  let userPaused = true;
+  const hero = $("#hero"), vid = $("#vid"), mute = $("#mute"), fill = $("#fill"), scrub = $("#scrub");
+  const full = $("#full"), hint = $("#pullhint"), vtime = $("#vtime");
+  const total = vtime ? vtime.textContent : "";
 
-  const sync = () => {
-    hero.classList.toggle("playing", !vid.paused && !vid.ended);
-    play.innerHTML = I.play;
-  };
-  play.onclick = (e) => { e.stopPropagation(); hero.classList.add("started"); userPaused = false; vid.play().catch(() => {}); };
-  vid.onclick = () => {
-    if (vid.paused) { userPaused = false; vid.play(); } else { userPaused = true; vid.pause(); }
-  };
+  const sync = () => hero.classList.toggle("playing", !vid.paused && !vid.ended);
+  const play = () => { hero.classList.add("started"); vid.play().catch(() => {}); };
+  // No play button: tap the video (or its poster) to play / pause.
+  hero.addEventListener("click", (e) => {
+    if (e.target.closest(".video-ui, .pull-hint")) return;
+    vid.paused ? play() : vid.pause();
+  });
   vid.onplay = sync; vid.onpause = sync;
-  vid.onended = () => { hero.classList.remove("started"); vid.currentTime = 0; sync(); };
-  vid.ontimeupdate = () => { if (vid.duration) fill.style.width = (vid.currentTime / vid.duration) * 100 + "%"; };
+  vid.onended = () => { vid.currentTime = 0; sync(); };
+  vid.ontimeupdate = () => {
+    if (!vid.duration) return;
+    fill.style.width = (vid.currentTime / vid.duration) * 100 + "%";
+    if (vtime) vtime.textContent = clock(Math.max(0, vid.duration - vid.currentTime));
+  };
   mute.onclick = (e) => { e.stopPropagation(); vid.muted = !vid.muted; mute.innerHTML = vid.muted ? I.soundOff : I.soundOn; };
 
   const seek = (clientX) => {
@@ -672,135 +675,118 @@ function setupVideo() {
     const p = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
     if (vid.duration) { vid.currentTime = p * vid.duration; fill.style.width = p * 100 + "%"; }
   };
-  scrub.onpointerdown = (e) => { scrub.setPointerCapture(e.pointerId); scrub.classList.add("active"); seek(e.clientX); };
+  scrub.onpointerdown = (e) => { e.stopPropagation(); scrub.setPointerCapture(e.pointerId); scrub.classList.add("active"); seek(e.clientX); };
   scrub.onpointermove = (e) => { if (scrub.classList.contains("active")) seek(e.clientX); };
   scrub.onpointerup = () => scrub.classList.remove("active");
+  scrub.onclick = (e) => e.stopPropagation();
 
   // Pause when scrolled away; never auto-resume (the user decides).
   const io = new IntersectionObserver(([entry]) => {
-    if (hero.classList.contains("immersive")) return;
     if (entry.intersectionRatio < 0.35 && !vid.paused) vid.pause();
+    // Tall (full screen) video scrolled completely away: fold it back without a jump.
+    if (!entry.isIntersecting && hero.classList.contains("tall")) collapse(true);
   }, { threshold: [0, 0.35, 1] });
   io.observe(hero);
   const onHide = () => { if (document.hidden && !vid.paused) vid.pause(); };
   document.addEventListener("visibilitychange", onHide);
   detailCleanup.push(() => { io.disconnect(); document.removeEventListener("visibilitychange", onHide); vid.pause(); vid.removeAttribute("src"); vid.load(); });
-  void userPaused;
+  void total;
 
-  // ---- full screen: pull down at the top of the page, or the expand button
-  const hint = $("#pullhint"), closeBtn = $("#immclose");
-  const PULL = 90;
-  let spacer = null;
-
-  const enter = () => {
-    if (hero.classList.contains("immersive")) return;
-    const r = hero.getBoundingClientRect();
-    spacer = document.createElement("div");
-    spacer.style.height = r.height + "px";
-    hero.before(spacer);
-    hero.style.setProperty("--from-top", r.top + "px");
-    hero.style.setProperty("--from-h", r.height + "px");
-    hero.style.transform = "";
-    hero.classList.add("immersive");
-    document.documentElement.classList.add("no-scroll");
+  // ---- full screen: the video grows to fill the screen inside the page, the
+  // recipe stays below it (title over the bottom), so you simply scroll on.
+  const expand = () => {
+    if (hero.classList.contains("tall")) return;
+    window.scrollTo({ top: 0 });
+    hero.style.height = hero.offsetHeight + "px";
     void hero.offsetHeight;
-    hero.classList.add("open");
-    hero.classList.add("started");
-    // started from a touch/click, so playing with sound is allowed
+    hero.classList.add("tall");
+    hero.style.height = window.innerHeight + "px";
+    const done = () => { hero.style.height = ""; };
+    hero.addEventListener("transitionend", done, { once: true });
+    setTimeout(done, 600);
     vid.muted = false; mute.innerHTML = I.soundOn;
-    userPaused = false;
-    vid.play().catch(() => {});
-    GlassLight.update();
+    play();
+    full.innerHTML = I.collapse;
+    full.setAttribute("aria-label", "Exit full screen");
   };
-  const exit = () => {
-    if (!hero.classList.contains("immersive")) return;
-    const r = spacer.getBoundingClientRect();
-    hero.style.setProperty("--from-top", r.top + "px");
-    hero.style.setProperty("--from-h", r.height + "px");
-    hero.style.transform = "";
-    hero.classList.remove("open");
-    const done = () => {
-      hero.classList.remove("immersive");
-      spacer?.remove(); spacer = null;
-      document.documentElement.classList.remove("no-scroll");
-      GlassLight.update();
-    };
-    let finished = false;
-    const fin = () => { if (!finished) { finished = true; done(); } };
-    hero.addEventListener("transitionend", fin, { once: true });
-    setTimeout(fin, 600);
-  };
-  $("#full").onclick = (e) => { e.stopPropagation(); enter(); };
-  closeBtn.onclick = (e) => { e.stopPropagation(); exit(); };
-
-  let startY = null, pull = 0, mode = null;
-  const onStart = (e) => {
-    if (e.touches.length !== 1 || e.target.closest(".scrub, .sheet")) { startY = null; return; }
-    startY = e.touches[0].clientY; pull = 0;
-    mode = hero.classList.contains("immersive") ? "dismiss" : window.scrollY <= 0 ? "pull" : null;
-  };
-  const onMove = (e) => {
-    if (startY == null || !mode) return;
-    const dy = e.touches[0].clientY - startY;
-    if (mode === "pull") {
-      if (dy <= 0 || window.scrollY > 0) { if (pull) reset(); return; }
-      e.preventDefault();
-      pull = dy;
-      const eased = PULL * 1.6 * (1 - Math.exp(-dy / (PULL * 1.6)));   // rubber band
-      hero.classList.add("pulling");
-      hero.style.transform = `translateY(${eased * 0.25}px) scale(${1 + eased / 520})`;
-      hint.style.opacity = Math.min(1, eased / PULL);
-      hint.classList.toggle("ready", eased >= PULL * 0.95);
-      if (eased >= PULL * 0.95 && !hint.dataset.buzzed) { hint.dataset.buzzed = 1; navigator.vibrate?.(10); }
-    } else {
-      e.preventDefault();
-      pull = Math.max(0, dy);
-      hero.classList.add("pulling");
-      hero.style.transform = `translateY(${pull}px) scale(${1 - Math.min(pull, 400) / 2000})`;
-      hero.style.setProperty("--dismiss", Math.min(1, pull / 300));
+  function collapse(offscreen = false) {
+    if (!hero.classList.contains("tall")) return;
+    const before = hero.offsetHeight;
+    hero.classList.remove("tall");
+    full.innerHTML = I.expand;
+    full.setAttribute("aria-label", "Full screen");
+    if (offscreen) {
+      // The hero is above the viewport: keep what you're reading in place.
+      hero.style.transition = "none";
+      const after = hero.offsetHeight;
+      window.scrollBy(0, after - before);
+      void hero.offsetHeight;
+      hero.style.transition = "";
+      return;
     }
-  };
+    hero.style.height = before + "px";
+    void hero.offsetHeight;
+    hero.style.height = "";
+  }
+  full.onclick = (e) => { e.stopPropagation(); hero.classList.contains("tall") ? collapse() : expand(); };
+
+  // Pull down at the very top: expand (or fold back when already full screen).
+  const PULL = 90;
+  let startY = null, pull = 0;
+  const eased = (d) => PULL * 1.6 * (1 - Math.exp(-d / (PULL * 1.6)));
   const reset = () => {
     pull = 0;
     hero.classList.remove("pulling");
     hero.style.transform = "";
-    hero.style.removeProperty("--dismiss");
     hint.style.opacity = 0; hint.classList.remove("ready"); delete hint.dataset.buzzed;
   };
+  const onStart = (e) => {
+    startY = e.touches.length === 1 && window.scrollY <= 0 && !e.target.closest(".scrub, .sheet") ? e.touches[0].clientY : null;
+    pull = 0;
+  };
+  const onMove = (e) => {
+    if (startY == null) return;
+    const dy = e.touches[0].clientY - startY;
+    if (dy <= 0 || window.scrollY > 0) { if (pull) reset(); return; }
+    e.preventDefault();
+    pull = dy;
+    const p = eased(dy);
+    hero.classList.add("pulling");
+    hero.style.transform = `translateY(${p * 0.25}px) scale(${1 + p / 520})`;
+    const tall = hero.classList.contains("tall");
+    hint.querySelector("span").textContent = tall ? "Release to shrink" : "Release for full screen";
+    hint.style.opacity = Math.min(1, p / PULL);
+    hint.classList.toggle("ready", p >= PULL * 0.95);
+    if (p >= PULL * 0.95 && !hint.dataset.buzzed) { hint.dataset.buzzed = 1; navigator.vibrate?.(10); }
+  };
   const onEnd = () => {
-    if (startY == null || !mode) return;
-    const eased = PULL * 1.6 * (1 - Math.exp(-pull / (PULL * 1.6)));
-    if (mode === "pull" && eased >= PULL * 0.95) { hero.classList.remove("pulling"); enter(); hint.style.opacity = 0; hint.classList.remove("ready"); delete hint.dataset.buzzed; }
-    else if (mode === "dismiss" && pull > 110) { hero.classList.remove("pulling"); hero.style.removeProperty("--dismiss"); exit(); }
-    else reset();
-    startY = null; mode = null; pull = 0;
+    if (startY == null) return;
+    const go = eased(pull) >= PULL * 0.95;
+    reset();
+    startY = null;
+    if (go) hero.classList.contains("tall") ? collapse() : expand();
   };
   document.addEventListener("touchstart", onStart, { passive: true });
   document.addEventListener("touchmove", onMove, { passive: false });
   document.addEventListener("touchend", onEnd);
   document.addEventListener("touchcancel", onEnd);
-  const onKey = (e) => { if (e.key === "Escape") exit(); };
-  document.addEventListener("keydown", onKey);
   detailCleanup.push(() => {
     document.removeEventListener("touchstart", onStart);
     document.removeEventListener("touchmove", onMove);
     document.removeEventListener("touchend", onEnd);
     document.removeEventListener("touchcancel", onEnd);
-    document.removeEventListener("keydown", onKey);
-    document.documentElement.classList.remove("no-scroll");
   });
 }
 
 // ------------------------------------------------------------------ glass light
-// Moves a virtual light source over every visible .glass element. The rim
-// highlight (--ga) points at the light and the inner glow (--gx/--gy) sits on
-// the side facing it, so glass reacts while the page or a chip row scrolls.
+// Gently slides the specular highlight of visible .glass elements as they move
+// over the screen (scrolling, chip row swiping): light seems to come from the
+// top of the display. Kept subtle on purpose.
 const GlassLight = (() => {
   let raf = 0;
   const run = () => {
     raf = 0;
     const vw = window.innerWidth, vh = window.innerHeight;
-    const lx = vw * 0.3, ly = vh * 0.18;
     const todo = [];
     for (const el of document.querySelectorAll(".glass")) {
       const r = el.getBoundingClientRect();
@@ -808,16 +794,10 @@ const GlassLight = (() => {
       todo.push([el, r]);
     }
     for (const [el, r] of todo) {
-      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-      const dx = lx - cx, dy = ly - cy;
-      const a = Math.atan2(dx, -dy);                       // 0 = up, clockwise
-      const dist = Math.hypot(dx / vw, dy / vh);
-      const gl = Math.max(0.35, Math.min(1, 1.15 - dist * 0.9));
-      const st = el.style;
-      st.setProperty("--ga", ((a * 180) / Math.PI - 14).toFixed(1) + "deg");
-      st.setProperty("--gx", (50 + Math.sin(a) * 42).toFixed(1) + "%");
-      st.setProperty("--gy", (50 - Math.cos(a) * 55).toFixed(1) + "%");
-      st.setProperty("--gl", gl.toFixed(2));
+      const x = Math.min(1, Math.max(0, (r.left + r.width / 2) / vw));
+      const y = Math.min(1, Math.max(0, (r.top + r.height / 2) / vh));
+      el.style.setProperty("--gx", (12 + x * 26).toFixed(1) + "%");
+      el.style.setProperty("--gy", (-16 + y * 14).toFixed(1) + "%");
     }
   };
   const update = () => { if (!raf) raf = requestAnimationFrame(run); };
