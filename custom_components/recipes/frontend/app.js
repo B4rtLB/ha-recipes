@@ -21,6 +21,8 @@ const I = {
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
   minus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 12h14"/></svg>',
   more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>',
+  close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  expand: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>',
   back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4l-8 8 8 8"/></svg>',
   play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.6-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z"/></svg>',
   pause: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4.2" height="16" rx="1.4"/><rect x="13.8" y="4" width="4.2" height="16" rx="1.4"/></svg>',
@@ -179,7 +181,7 @@ function lazyImg(src, alt = "") {
 // ------------------------------------------------------------------ state
 const state = {
   recipes: null,
-  filter: store.get("filter", "All"),
+  filters: new Set(store.get("filters", [])),
   tab: "all",
   search: "",
   searching: false,
@@ -220,11 +222,37 @@ async function render() {
 }
 
 // ------------------------------------------------------------------ library
+// Same groups (and order) as the backend's TAG_GROUPS.
+const TAG_GROUPS = [
+  ["Course", ["Main", "Breakfast", "Lunch", "Snack", "Dessert", "Baking", "Sauce"]],
+  ["Protein", ["Chicken", "Beef", "Pork", "Fish", "Seafood", "Vegetarian"]],
+  ["Cuisine", ["Indian", "Somali", "Asian", "MiddleEastern", "Mexican", "Mediterranean", "Dutch"]],
+  ["Extra", ["Quick", "MealPrep", "Video"]],
+];
+const groupOf = (tag) => (TAG_GROUPS.find(([, tags]) => tags.includes(tag)) || ["Other"])[0];
+const tagLabel = (t) => ({ MiddleEastern: "Middle Eastern", MealPrep: "Meal Prep" })[t] || t;
+
+function saveFilters() { store.set("filters", [...state.filters]); }
+
+function setOnlyFilter(tag) {
+  state.filters = new Set([tag]);
+  saveFilters();
+}
+
+// Within a group a recipe may match any selected tag (Chicken OR Beef),
+// across groups it must match all (Main AND Chicken AND Quick).
+function matchesFilters(r) {
+  const byGroup = {};
+  for (const t of state.filters) (byGroup[groupOf(t)] ||= []).push(t);
+  return Object.values(byGroup).every((tags) =>
+    tags.some((t) => (t === "Video" ? r.has_video : (r.tags || []).includes(t)))
+  );
+}
+
 function visibleRecipes() {
   let list = state.recipes || [];
   if (state.tab === "fav") list = list.filter((r) => r.favorite);
-  if (state.filter === "Video") list = list.filter((r) => r.has_video);
-  else if (state.filter !== "All") list = list.filter((r) => (r.tags || []).includes(state.filter));
+  if (state.filters.size) list = list.filter(matchesFilters);
   const q = state.search.trim().toLowerCase();
   if (q) list = list.filter((r) => (r.title || "").toLowerCase().includes(q) || (r.tags || []).some((t) => t.toLowerCase().includes(q)));
   return list;
@@ -246,13 +274,26 @@ function cardHTML(r) {
 }
 
 function chipsHTML() {
-  const counts = {};
-  for (const r of state.recipes || []) for (const t of r.tags || []) counts[t] = (counts[t] || 0) + 1;
-  const tags = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
-  const hasVideo = (state.recipes || []).some((r) => r.has_video);
-  const all = ["All", ...(hasVideo ? ["Video"] : []), ...tags];
-  if (!all.includes(state.filter)) state.filter = "All";
-  return all.map((t) => `<button class="chip glass press" data-chip="${esc(t)}" aria-pressed="${t === state.filter}">${esc(t)}</button>`).join("");
+  const present = new Set();
+  for (const r of state.recipes || []) {
+    for (const t of r.tags || []) present.add(t);
+    if (r.has_video) present.add("Video");
+  }
+  for (const t of [...state.filters]) if (!present.has(t)) state.filters.delete(t);
+  let html = `<button class="chip glass press" data-chip="" aria-pressed="${state.filters.size === 0}">All</button>`;
+  for (const [, tags] of TAG_GROUPS) {
+    const shown = tags.filter((t) => present.has(t));
+    if (!shown.length) continue;
+    html += `<span class="chip-sep" aria-hidden="true"></span>`;
+    html += shown.map((t) => `<button class="chip glass press" data-chip="${esc(t)}" aria-pressed="${state.filters.has(t)}">${esc(tagLabel(t))}</button>`).join("");
+  }
+  return html;
+}
+
+function filterTitle() {
+  if (state.search) return "Results";
+  if (!state.filters.size) return "Recently Added";
+  return [...state.filters].map(tagLabel).join(" · ");
 }
 
 async function renderLibrary(fetch_ = true) {
@@ -266,20 +307,24 @@ async function renderLibrary(fetch_ = true) {
   const count = (state.recipes || []).filter((r) => r.status === "ready").length;
   const title = state.tab === "fav" ? "Favourites" : "Recipes";
   app.innerHTML = `<main class="library ${fetch_ ? "page" : ""}">
-    <div class="lib-top">
+    <div class="scroll-edge" id="edge"></div>
+    <div class="lib-top" id="libtop">
+      <div class="compact">${title}</div>
       <button class="icon-btn glass press" data-act="settings" aria-label="Settings">${I.more}</button>
       <button class="icon-btn glass press accent" data-act="add" aria-label="Add recipe">${I.plus}</button>
     </div>
-    <h1 class="large-title">${title}</h1>
+    <div class="lib-top-space"></div>
+    <h1 class="large-title" id="ltitle">${title}</h1>
     <div class="lib-sub">${count} recipe${count === 1 ? "" : "s"}</div>
     <div class="chips">${chipsHTML()}</div>
-    ${list.length ? `<div class="section-head"><h2>${state.search ? "Results" : state.filter === "All" ? "Recently Added" : esc(state.filter)}</h2></div>
+    ${list.length ? `<div class="section-head"><h2>${esc(filterTitle())}</h2></div>
       <div class="grid">${list.map(cardHTML).join("")}</div>`
       : emptyHTML()}
   </main>
   ${tabbarHTML()}`;
   if (!fetch_) window.scrollTo(0, scroll);
   bindLibrary();
+  GlassLight.update();
 }
 
 function emptyHTML() {
@@ -303,8 +348,30 @@ function tabbarHTML() {
   </nav>`;
 }
 
+let libScroll = null;
 function bindLibrary() {
-  $$("[data-chip]").forEach((b) => b.onclick = () => { state.filter = b.dataset.chip; store.set("filter", state.filter); renderLibrary(false); });
+  // compact title + scroll edge once the large title has scrolled under the buttons
+  const top = $("#libtop"), edge = $("#edge"), lt = $("#ltitle");
+  if (libScroll) window.removeEventListener("scroll", libScroll);
+  libScroll = () => {
+    if (!top.isConnected) { window.removeEventListener("scroll", libScroll); libScroll = null; return; }
+    const past = lt.getBoundingClientRect().bottom < top.getBoundingClientRect().bottom + 44;
+    top.classList.toggle("scrolled", past);
+    edge.classList.toggle("show", window.scrollY > 4);
+  };
+  window.addEventListener("scroll", libScroll, { passive: true });
+  libScroll();
+
+  $$("[data-chip]").forEach((b) => b.onclick = () => {
+    const tag = b.dataset.chip;
+    if (!tag) state.filters.clear();
+    else if (state.filters.has(tag)) state.filters.delete(tag);
+    else state.filters.add(tag);
+    saveFilters();
+    const chips = $(".chips"), x = chips.scrollLeft;
+    renderLibrary(false);
+    $(".chips").scrollLeft = x;
+  });
   $$("[data-tab]").forEach((b) => b.onclick = () => { state.tab = b.dataset.tab; window.scrollTo(0, 0); renderLibrary(false); });
   $('[data-act="add"]').onclick = openAddSheet;
   $('[data-act="settings"]').onclick = openSettingsSheet;
@@ -388,7 +455,10 @@ function heroHTML(r) {
       <div class="top-fade"></div><div class="fade"></div>
       <button class="play-btn glass press" id="play" aria-label="Play video">${I.play}</button>
       ${dur ? `<div class="duration">${dur}</div>` : ""}
+      <div class="pull-hint" id="pullhint">${I.expand}<span>Pull for full screen</span></div>
+      <button class="icon-btn glass press imm-close" id="immclose" aria-label="Close full screen">${I.close}</button>
       <div class="video-ui"><div class="scrub" id="scrub"><div class="scrub-track"><div class="scrub-fill" id="fill"></div></div></div>
+        <button class="icon-btn glass press" id="full" aria-label="Full screen">${I.expand}</button>
         <button class="icon-btn glass press" id="mute" aria-label="Mute">${I.soundOn}</button></div>
     </div>`;
   }
@@ -462,7 +532,9 @@ function detailHTML(r) {
   const servings = r.servings || null;
   const wanted = store.get("servings." + r.id, servings);
   const factor = servings && wanted ? wanted / servings : 1;
-  const eyebrow = r.tags && r.tags.length ? r.tags.slice(0, 3).join(" · ") : PLATFORM[(r.source || {}).platform] || "";
+  const eyebrow = r.tags && r.tags.length
+    ? r.tags.slice(0, 3).map((t) => `<button class="eyebrow-tag" data-tag="${esc(t)}">${esc(tagLabel(t))}</button>`).join('<span class="dot">·</span>')
+    : esc(PLATFORM[(r.source || {}).platform] || "");
   const errorPanel = r.status === "error" ? `<div class="error-panel"><h3>Couldn't read this recipe</h3><p>${esc(r.error || "Unknown error")}</p>
       <div class="row"><button class="btn plain press" data-act="retry">${I.retry}Try again</button>
       <button class="btn danger press" data-act="delete">${I.trash}Delete</button></div>
@@ -479,7 +551,7 @@ function detailHTML(r) {
     </div>
     ${heroHTML(r)}
     <div class="head">
-      ${eyebrow ? `<div class="eyebrow">${esc(eyebrow)}</div>` : ""}
+      ${eyebrow ? `<div class="eyebrow">${eyebrow}</div>` : ""}
       <h1 class="title" id="title">${esc(r.title || (busy ? "Saving recipe…" : "Untitled"))}</h1>
       ${r.description ? `<div class="desc">${esc(r.description)}</div>` : ""}
       ${factsHTML(r)}
@@ -500,7 +572,7 @@ function detailHTML(r) {
       ${stepsHTML(r)}
       <button class="cook-toggle glass press ${cookOn ? "on" : ""}" data-act="wake">${I.sun}<span>${cookOn ? "Screen stays on while cooking" : "Keep screen on while cooking"}</span></button>
       ${r.source_notes ? `<div class="notes-box"><b>Tips</b>${esc(r.source_notes)}</div>` : ""}
-      ${r.tags && r.tags.length ? `<div class="tags">${r.tags.map((t) => `<span class="tag">#${esc(t)}</span>`).join("")}</div>` : ""}
+      ${r.tags && r.tags.length ? `<div class="tags">${r.tags.map((t) => `<button class="tag press" data-tag="${esc(t)}">#${esc(tagLabel(t))}</button>`).join("")}</div>` : ""}
     </section>` : ""}
   </div>`;
 }
@@ -517,6 +589,12 @@ function bindDetail(r) {
     await api("/" + r.id, { method: "PATCH", body: { favorite: r.favorite } }).catch((err) => toast(err.message));
   };
   $('[data-act="retry"]')?.addEventListener("click", () => retry(r));
+  $$("[data-tag]").forEach((b) => b.onclick = () => {
+    setOnlyFilter(b.dataset.tag);
+    state.tab = "all";
+    location.hash = "#/";
+    window.scrollTo(0, 0);
+  });
   $('[data-act="shop"]')?.addEventListener("click", () => openShoppingSheet(r));
   $('[data-act="delete"]')?.addEventListener("click", () => removeRecipe(r));
 
@@ -599,6 +677,7 @@ function setupVideo() {
 
   // Pause when scrolled away; never auto-resume (the user decides).
   const io = new IntersectionObserver(([entry]) => {
+    if (hero.classList.contains("immersive")) return;
     if (entry.intersectionRatio < 0.35 && !vid.paused) vid.pause();
   }, { threshold: [0, 0.35, 1] });
   io.observe(hero);
@@ -606,7 +685,146 @@ function setupVideo() {
   document.addEventListener("visibilitychange", onHide);
   detailCleanup.push(() => { io.disconnect(); document.removeEventListener("visibilitychange", onHide); vid.pause(); vid.removeAttribute("src"); vid.load(); });
   void userPaused;
+
+  // ---- full screen: pull down at the top of the page, or the expand button
+  const hint = $("#pullhint"), closeBtn = $("#immclose");
+  const PULL = 90;
+  let spacer = null;
+
+  const enter = () => {
+    if (hero.classList.contains("immersive")) return;
+    const r = hero.getBoundingClientRect();
+    spacer = document.createElement("div");
+    spacer.style.height = r.height + "px";
+    hero.before(spacer);
+    hero.style.setProperty("--from-top", r.top + "px");
+    hero.style.setProperty("--from-h", r.height + "px");
+    hero.style.transform = "";
+    hero.classList.add("immersive");
+    document.documentElement.classList.add("no-scroll");
+    void hero.offsetHeight;
+    hero.classList.add("open");
+    hero.classList.add("started");
+    // started from a touch/click, so playing with sound is allowed
+    vid.muted = false; mute.innerHTML = I.soundOn;
+    userPaused = false;
+    vid.play().catch(() => {});
+    GlassLight.update();
+  };
+  const exit = () => {
+    if (!hero.classList.contains("immersive")) return;
+    const r = spacer.getBoundingClientRect();
+    hero.style.setProperty("--from-top", r.top + "px");
+    hero.style.setProperty("--from-h", r.height + "px");
+    hero.style.transform = "";
+    hero.classList.remove("open");
+    const done = () => {
+      hero.classList.remove("immersive");
+      spacer?.remove(); spacer = null;
+      document.documentElement.classList.remove("no-scroll");
+      GlassLight.update();
+    };
+    let finished = false;
+    const fin = () => { if (!finished) { finished = true; done(); } };
+    hero.addEventListener("transitionend", fin, { once: true });
+    setTimeout(fin, 600);
+  };
+  $("#full").onclick = (e) => { e.stopPropagation(); enter(); };
+  closeBtn.onclick = (e) => { e.stopPropagation(); exit(); };
+
+  let startY = null, pull = 0, mode = null;
+  const onStart = (e) => {
+    if (e.touches.length !== 1 || e.target.closest(".scrub, .sheet")) { startY = null; return; }
+    startY = e.touches[0].clientY; pull = 0;
+    mode = hero.classList.contains("immersive") ? "dismiss" : window.scrollY <= 0 ? "pull" : null;
+  };
+  const onMove = (e) => {
+    if (startY == null || !mode) return;
+    const dy = e.touches[0].clientY - startY;
+    if (mode === "pull") {
+      if (dy <= 0 || window.scrollY > 0) { if (pull) reset(); return; }
+      e.preventDefault();
+      pull = dy;
+      const eased = PULL * 1.6 * (1 - Math.exp(-dy / (PULL * 1.6)));   // rubber band
+      hero.classList.add("pulling");
+      hero.style.transform = `translateY(${eased * 0.25}px) scale(${1 + eased / 520})`;
+      hint.style.opacity = Math.min(1, eased / PULL);
+      hint.classList.toggle("ready", eased >= PULL * 0.95);
+      if (eased >= PULL * 0.95 && !hint.dataset.buzzed) { hint.dataset.buzzed = 1; navigator.vibrate?.(10); }
+    } else {
+      e.preventDefault();
+      pull = Math.max(0, dy);
+      hero.classList.add("pulling");
+      hero.style.transform = `translateY(${pull}px) scale(${1 - Math.min(pull, 400) / 2000})`;
+      hero.style.setProperty("--dismiss", Math.min(1, pull / 300));
+    }
+  };
+  const reset = () => {
+    pull = 0;
+    hero.classList.remove("pulling");
+    hero.style.transform = "";
+    hero.style.removeProperty("--dismiss");
+    hint.style.opacity = 0; hint.classList.remove("ready"); delete hint.dataset.buzzed;
+  };
+  const onEnd = () => {
+    if (startY == null || !mode) return;
+    const eased = PULL * 1.6 * (1 - Math.exp(-pull / (PULL * 1.6)));
+    if (mode === "pull" && eased >= PULL * 0.95) { hero.classList.remove("pulling"); enter(); hint.style.opacity = 0; hint.classList.remove("ready"); delete hint.dataset.buzzed; }
+    else if (mode === "dismiss" && pull > 110) { hero.classList.remove("pulling"); hero.style.removeProperty("--dismiss"); exit(); }
+    else reset();
+    startY = null; mode = null; pull = 0;
+  };
+  document.addEventListener("touchstart", onStart, { passive: true });
+  document.addEventListener("touchmove", onMove, { passive: false });
+  document.addEventListener("touchend", onEnd);
+  document.addEventListener("touchcancel", onEnd);
+  const onKey = (e) => { if (e.key === "Escape") exit(); };
+  document.addEventListener("keydown", onKey);
+  detailCleanup.push(() => {
+    document.removeEventListener("touchstart", onStart);
+    document.removeEventListener("touchmove", onMove);
+    document.removeEventListener("touchend", onEnd);
+    document.removeEventListener("touchcancel", onEnd);
+    document.removeEventListener("keydown", onKey);
+    document.documentElement.classList.remove("no-scroll");
+  });
 }
+
+// ------------------------------------------------------------------ glass light
+// Moves a virtual light source over every visible .glass element. The rim
+// highlight (--ga) points at the light and the inner glow (--gx/--gy) sits on
+// the side facing it, so glass reacts while the page or a chip row scrolls.
+const GlassLight = (() => {
+  let raf = 0;
+  const run = () => {
+    raf = 0;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const lx = vw * 0.3, ly = vh * 0.18;
+    const todo = [];
+    for (const el of document.querySelectorAll(".glass")) {
+      const r = el.getBoundingClientRect();
+      if (!r.width || r.bottom < -20 || r.top > vh + 20) continue;
+      todo.push([el, r]);
+    }
+    for (const [el, r] of todo) {
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      const dx = lx - cx, dy = ly - cy;
+      const a = Math.atan2(dx, -dy);                       // 0 = up, clockwise
+      const dist = Math.hypot(dx / vw, dy / vh);
+      const gl = Math.max(0.35, Math.min(1, 1.15 - dist * 0.9));
+      const st = el.style;
+      st.setProperty("--ga", ((a * 180) / Math.PI - 14).toFixed(1) + "deg");
+      st.setProperty("--gx", (50 + Math.sin(a) * 42).toFixed(1) + "%");
+      st.setProperty("--gy", (50 - Math.cos(a) * 55).toFixed(1) + "%");
+      st.setProperty("--gl", gl.toFixed(2));
+    }
+  };
+  const update = () => { if (!raf) raf = requestAnimationFrame(run); };
+  document.addEventListener("scroll", update, { passive: true, capture: true });
+  window.addEventListener("resize", update);
+  new MutationObserver(update).observe(document.body, { childList: true, subtree: true });
+  return { update };
+})();
 
 // ------------------------------------------------------------------ timers
 const Timers = {

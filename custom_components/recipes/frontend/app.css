@@ -38,23 +38,31 @@ img { display: block; }
 .hidden { display: none !important; }
 
 /* ------------------------------------------------------------- Liquid glass */
-
+/*
+ * A CSS approximation of iOS 26 Liquid Glass. Safari can't refract the backdrop,
+ * so the "glass" is sold by light: a clear, bright backdrop, a thin lit rim and a
+ * soft specular glow. A small script (GlassLight in app.js) moves a virtual light
+ * source over every glass element as it scrolls, so the rim highlight slides
+ * around the edge and the glow shifts, the way real glass catches the light.
+ *   --ga  angle (deg, 0 = top) of the rim facing the light
+ *   --gx/--gy  where the specular glow sits
+ *   --gl  light intensity 0..1
+ */
 .glass {
+  --ga: 330deg; --gx: 30%; --gy: 0%; --gl: 0.85;
   position: relative;
   isolation: isolate;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.04)),
-    rgba(18, 18, 20, 0.34);
-  -webkit-backdrop-filter: blur(24px) saturate(150%);
-  backdrop-filter: blur(24px) saturate(150%);
-  border: 0.5px solid rgba(255, 255, 255, 0.2);
+  background: rgba(38, 38, 42, 0.30);
+  -webkit-backdrop-filter: blur(12px) saturate(190%) brightness(1.1);
+  backdrop-filter: blur(12px) saturate(190%) brightness(1.1);
   box-shadow:
-    inset 0 1px 0.5px rgba(255, 255, 255, 0.35),
-    inset 0 -0.5px 0.5px rgba(255, 255, 255, 0.08),
-    inset 0 0 18px rgba(255, 255, 255, 0.04),
-    0 10px 30px rgba(0, 0, 0, 0.38);
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.10),
+    inset 0 -10px 14px -12px rgba(255, 255, 255, 0.22),
+    inset 0 8px 16px -14px rgba(255, 255, 255, 0.30),
+    0 8px 24px rgba(0, 0, 0, 0.32),
+    0 1px 2px rgba(0, 0, 0, 0.35);
 }
-/* specular highlight that sits on the rim, like light caught in curved glass */
+/* specular glow inside the glass, follows the light */
 .glass::before {
   content: "";
   position: absolute;
@@ -63,15 +71,51 @@ img { display: block; }
   pointer-events: none;
   z-index: -1;
   background:
-    radial-gradient(120% 70% at 20% -10%, rgba(255, 255, 255, 0.22), transparent 55%),
-    radial-gradient(90% 60% at 100% 120%, rgba(255, 255, 255, 0.08), transparent 60%);
-  mix-blend-mode: screen;
+    radial-gradient(90% 80% at var(--gx) var(--gy), rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0) 70%),
+    radial-gradient(120% 90% at calc(100% - var(--gx)) calc(100% - var(--gy)), rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0) 60%);
+  opacity: var(--gl);
+  transition: opacity 0.3s var(--ease);
+}
+/* lit rim: brightest where it faces the light, a fainter reflection opposite */
+.glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  padding: 1.5px;
+  background: conic-gradient(from var(--ga),
+    rgba(255, 255, 255, 1),
+    rgba(255, 255, 255, 0.45) 8%,
+    rgba(255, 255, 255, 0.10) 20%,
+    rgba(255, 255, 255, 0.05) 38%,
+    rgba(255, 255, 255, 0.50) 50%,
+    rgba(255, 255, 255, 0.05) 62%,
+    rgba(255, 255, 255, 0.10) 80%,
+    rgba(255, 255, 255, 0.45) 92%,
+    rgba(255, 255, 255, 1));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: calc(0.45 + var(--gl) * 0.55);
 }
 .glass.dense {
   background: linear-gradient(180deg, rgba(44, 44, 46, 0.72), rgba(28, 28, 30, 0.66));
 }
-.press { transition: transform 0.35s var(--spring), background-color 0.2s; }
+/* big surfaces keep a quiet hairline instead of the lit rim */
+.sheet.glass::after, .nav-bar.glass::after { display: none; }
+.sheet.glass::before, .nav-bar.glass::before { opacity: 0.5; }
+
+.press { transition: transform 0.4s var(--spring), background-color 0.2s; }
 .press:active { transform: scale(0.94); }
+/* glass buttons swell and light up from inside when pressed, like iOS 26 */
+.glass.press:active { transform: scale(1.08); }
+.glass.press:active::before {
+  opacity: 1;
+  background:
+    radial-gradient(110% 110% at 50% 50%, rgba(255, 255, 255, 0.30), rgba(255, 255, 255, 0.06) 70%),
+    radial-gradient(90% 75% at var(--gx) var(--gy), rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0) 70%);
+}
 
 .icon-btn {
   width: 44px; height: 44px; border-radius: 50%;
@@ -84,11 +128,28 @@ img { display: block; }
 /* ------------------------------------------------------------- Library */
 
 .library { padding: calc(var(--safe-top) + 8px) 0 calc(var(--safe-bottom) + 120px); }
+.lib-top-space { height: 52px; }
 .lib-top {
+  position: fixed; top: calc(var(--safe-top) + 14px); left: 0; right: 0; z-index: 30;
   display: flex; justify-content: flex-end; gap: 10px;
-  padding: 6px var(--gutter) 0;
-  height: 52px;
+  padding: 0 var(--gutter); pointer-events: none;
 }
+.lib-top .icon-btn { pointer-events: auto; }
+.lib-top .compact {
+  position: absolute; left: 0; right: 0; top: 0; height: 44px; display: grid; place-items: center;
+  font-size: 17px; font-weight: 600; opacity: 0; transform: translateY(6px);
+  transition: opacity 0.25s var(--ease), transform 0.25s var(--ease);
+}
+.lib-top.scrolled .compact { opacity: 1; transform: none; }
+/* iOS 26 style scroll edge: content softly blurs and darkens under the top controls */
+.scroll-edge {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 14; pointer-events: none;
+  height: calc(var(--safe-top) + 118px);
+  height: calc(var(--safe-top) + 132px);
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.62) 45%, rgba(0, 0, 0, 0.25) 75%, rgba(0, 0, 0, 0));
+  opacity: 0; transition: opacity 0.25s var(--ease);
+}
+.scroll-edge.show { opacity: 1; }
 .large-title {
   font-size: 34px; font-weight: 700; letter-spacing: 0.01em;
   padding: 2px var(--gutter) 0; margin: 0;
@@ -97,7 +158,8 @@ img { display: block; }
 
 .chips {
   display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none;
-  padding: 16px var(--gutter) 6px; scroll-padding: var(--gutter);
+  padding: 14px var(--gutter) 10px; scroll-padding: var(--gutter);
+  position: sticky; top: calc(var(--safe-top) + 54px); z-index: 16;
 }
 .chips::-webkit-scrollbar { display: none; }
 .chip {
@@ -105,8 +167,10 @@ img { display: block; }
   font-size: 15px; font-weight: 500; color: var(--label);
   display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
 }
-.chip[aria-pressed="true"] { background: var(--label); color: #000; border-color: transparent; box-shadow: none; }
+.chip[aria-pressed="true"] { background: rgba(255, 255, 255, 0.92); color: #000; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3); }
 .chip[aria-pressed="true"]::before { display: none; }
+.chip[aria-pressed="true"]::after { opacity: 0.5; }
+.chip-sep { flex: none; width: 1px; height: 18px; align-self: center; margin: 0 4px; background: rgba(255, 255, 255, 0.18); border-radius: 1px; }
 
 .section-head {
   display: flex; align-items: baseline; justify-content: space-between;
@@ -186,11 +250,7 @@ img { display: block; }
 .tabs {
   height: 62px; border-radius: 31px; display: flex; padding: 4px; flex: 1; max-width: 360px;
 }
-.tabbar .glass {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.03)),
-    rgba(22, 22, 24, 0.62);
-}
+.tabbar .glass { background: rgba(30, 30, 34, 0.52); }
 .tab {
   flex: 1; border-radius: 27px; display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 2px; font-size: 10.5px; font-weight: 600; color: var(--label);
@@ -258,6 +318,39 @@ img { display: block; }
 .video-ui .icon-btn { width: 36px; height: 36px; }
 .video-ui .icon-btn svg { width: 16px; height: 16px; }
 
+/* pull-to-full-screen */
+.hero { transform-origin: 50% 0; }
+.hero.pulling { transition: none; }
+.hero:not(.pulling):not(.immersive) { transition: transform 0.45s var(--spring); }
+.pull-hint {
+  position: absolute; left: 50%; top: calc(var(--safe-top) + 64px); z-index: 4; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 16px;
+  font-size: 13px; font-weight: 600; color: #fff; white-space: nowrap;
+  background: rgba(0, 0, 0, 0.35); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  opacity: 0; pointer-events: none; transition: background-color 0.2s;
+}
+.pull-hint svg { width: 14px; height: 14px; transition: transform 0.3s var(--spring); }
+.pull-hint.ready { background: rgba(250, 45, 72, 0.85); }
+.pull-hint.ready svg { transform: scale(1.2); }
+.imm-close { position: absolute; top: calc(var(--safe-top) + 10px); left: 16px; z-index: 6; opacity: 0; pointer-events: none; }
+html.no-scroll, html.no-scroll body { overflow: hidden; }
+.hero.immersive {
+  position: fixed; left: 0; right: 0; z-index: 60; min-height: 0;
+  top: var(--from-top); height: var(--from-h);
+  background: #000;
+  transition: top 0.42s var(--ease), height 0.42s var(--ease), transform 0.35s var(--spring), border-radius 0.42s var(--ease);
+}
+.hero.immersive.open { top: 0; height: 100dvh; border-radius: 0; }
+.hero.immersive video, .hero.immersive img.poster { object-fit: contain; }
+.hero.immersive .fade, .hero.immersive .top-fade, .hero.immersive .duration { opacity: 0; pointer-events: none; }
+.hero.immersive #full { display: none; }
+.hero.immersive.open .imm-close { opacity: 1; pointer-events: auto; transition: opacity 0.3s 0.2s; }
+.hero.immersive .video-ui { bottom: calc(var(--safe-bottom) + 24px); opacity: 1; }
+.hero.immersive .play-btn { top: 50%; }
+.hero.immersive { box-shadow: 0 0 0 100vmax rgba(0, 0, 0, calc(1 - var(--dismiss, 0))); }
+.hero.immersive:not(.open) { box-shadow: none; }
+.hero.immersive.pulling { transition: none; }
+
 .nav-float {
   position: fixed; top: calc(var(--safe-top) + 6px); left: 0; right: 0; z-index: 30;
   display: flex; justify-content: space-between; padding: 0 16px; pointer-events: none;
@@ -276,7 +369,10 @@ img { display: block; }
 
 .head { padding: 0 var(--gutter); margin-top: -64px; position: relative; z-index: 2; }
 .hero.no-media + .head { margin-top: -110px; }
-.eyebrow { font-size: 13px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 0.04em; }
+.eyebrow { font-size: 13px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 0.04em; display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; }
+.eyebrow-tag { color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; padding: 4px 0; }
+.eyebrow-tag:active { opacity: 0.5; }
+.eyebrow .dot { opacity: 0.7; }
 .title { font-size: 30px; font-weight: 800; line-height: 1.1; margin: 4px 0 0; letter-spacing: -0.015em; }
 .desc { color: var(--label-2); font-size: 15px; line-height: 1.4; margin-top: 8px; }
 .facts { display: flex; gap: 8px; margin-top: 16px; overflow-x: auto; scrollbar-width: none; }
@@ -343,11 +439,13 @@ img { display: block; }
   height: 38px; padding: 0 16px 0 12px; border-radius: 19px; display: inline-flex; align-items: center; gap: 8px;
   font-size: 15px; font-weight: 600; font-family: var(--font-round);
 }
+.timer-chip.glass { background: linear-gradient(180deg, rgba(250, 45, 72, 0.18), rgba(250, 45, 72, 0.06)), rgba(38, 38, 42, 0.30); }
 .timer-chip svg { width: 18px; height: 18px; color: var(--accent); }
 .timer-chip.running { color: var(--accent); }
 
 .tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 30px; }
-.tag { font-size: 13px; color: var(--label-2); padding: 6px 12px; border-radius: 14px; background: var(--bg-elev); }
+.tag { font-size: 14px; color: var(--label); padding: 7px 13px; border-radius: 15px; background: var(--bg-elev); }
+.tag:active { background: var(--bg-elev-2); }
 .notes-box { margin-top: 26px; padding: 16px; border-radius: 16px; background: var(--bg-elev); color: var(--label-2); font-size: 15px; line-height: 1.45; }
 .notes-box b { color: var(--label); display: block; margin-bottom: 4px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; }
 
@@ -437,7 +535,7 @@ img { display: block; }
 .splash p { color: var(--label-2); font-size: 15px; line-height: 1.45; }
 
 /* page transitions */
-.page { animation: page-in 0.42s var(--ease) both; }
+.page { animation: page-in 0.42s var(--ease) backwards; }
 @keyframes page-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
