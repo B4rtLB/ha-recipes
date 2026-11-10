@@ -1,0 +1,14 @@
+{
+  "domain": "recipes",
+  "name": "Recipes",
+  "codeowners": ["@B4rtLB"],
+  "config_flow": true,
+  "dependencies": ["http", "webhook", "ai_task", "stt"],
+  "documentation": "https://github.com/B4rtLB/ha-recipes",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/B4rtLB/ha-recipes/issues",
+  "requirements": ["yt-dlp==2026.10.26"],
+  "single_config_entry": true,
+  "version": "0.1.0"
+}

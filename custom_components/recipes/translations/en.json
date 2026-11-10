@@ -1,0 +1,53 @@
+{
+  "config": {
+    "abort": {
+      "single_instance_allowed": "Recipes is already set up."
+    },
+    "step": {
+      "user": {
+        "title": "Recipes",
+        "description": "Recipes are read with an AI Task entity. Short social media captions are completed with a speech-to-text transcript of the video.",
+        "data": {
+          "ai_task_entity": "AI Task entity",
+          "stt_entity": "Speech-to-text entity (for video audio)",
+          "language": "Recipe language",
+          "transcribe": "Transcribe video audio when the caption is short",
+          "notify_service": "Notify when a recipe is ready (notify entity like notify.barts_iphone, or a notify action)",
+          "todo_entity": "Shopping list (to-do list for ingredients)"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Recipes",
+        "description": "Share webhook: {webhook}",
+        "data": {
+          "ai_task_entity": "AI Task entity",
+          "stt_entity": "Speech-to-text entity (for video audio)",
+          "language": "Recipe language",
+          "transcribe": "Transcribe video audio when the caption is short",
+          "notify_service": "Notify when a recipe is ready (notify entity like notify.barts_iphone, or a notify action)",
+          "todo_entity": "Shopping list (to-do list for ingredients)"
+        }
+      }
+    }
+  },
+  "services": {
+    "add": {
+      "name": "Add recipe",
+      "description": "Save a recipe from a URL (web page, TikTok, Instagram).",
+      "fields": {
+        "url": {
+          "name": "URL",
+          "description": "Link to the recipe or video."
+        },
+        "force": {
+          "name": "Force",
+          "description": "Save again even if this link was saved before."
+        }
+      }
+    }
+  }
+}

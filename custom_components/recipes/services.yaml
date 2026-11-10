@@ -1,0 +1,12 @@
+add:
+  fields:
+    url:
+      required: true
+      example: "https://www.tiktok.com/@user/video/123"
+      selector:
+        text:
+    force:
+      required: false
+      default: false
+      selector:
+        boolean:
