@@ -368,7 +368,7 @@ html.no-scroll, html.no-scroll body { overflow: hidden; }
 .nav-bar .t { font-size: 17px; font-weight: 600; max-width: 58%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .head { padding: 0 var(--gutter); margin-top: -64px; position: relative; z-index: 2; }
-.hero.no-media + .head { margin-top: -110px; }
+.hero.no-media { height: calc(var(--safe-top) + 230px); min-height: 0; }
 .eyebrow { font-size: 13px; font-weight: 600; color: var(--accent); text-transform: uppercase; letter-spacing: 0.04em; display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; }
 .eyebrow-tag { color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; padding: 4px 0; }
 .eyebrow-tag:active { opacity: 0.5; }

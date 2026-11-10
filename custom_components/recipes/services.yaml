@@ -19,6 +19,10 @@ status:
         number:
           min: 1
           max: 500
+    id:
+      required: false
+      selector:
+        text:
 delete:
   fields:
     id:

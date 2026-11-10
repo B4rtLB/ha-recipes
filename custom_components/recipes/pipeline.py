@@ -101,6 +101,12 @@ class RecipeProcessor:
 
         source = recipe.get("source") or {}
         url: str | None = source.get("url")
+        if url and sources.is_asset_url(url):
+            # An older share picked a script/CDN link; look for the real one.
+            better = sources.best_url(recipe.get("shared"), recipe.get("input_text"))
+            source = {"url": better, "platform": sources.detect_platform(better)} if better else {}
+            url = better
+            self.store.async_update(recipe_id, {"source": source})
         platform = source.get("platform") or (
             sources.detect_platform(url) if url else ("notes" if recipe.get("imported_from") else "text" if recipe.get("input_text") else "upload")
         )
@@ -420,8 +426,13 @@ def new_recipe_from_payload(
 
     Returns (recipe, created). Existing URLs are not duplicated unless force=True.
     """
-    url = payload.get("url") or sources.first_url(payload.get("text") or "")
+    raw_url = payload.get("url")
+    if isinstance(raw_url, list):
+        raw_url = "\n".join(str(u) for u in raw_url)
+    raw_url = str(raw_url or "")
     text = payload.get("text") or ""
+    url = sources.best_url(raw_url, text)
+    shared = "\n".join(x for x in (raw_url, text) if x).strip()
     if url and text.strip() == url:
         text = ""
     imp_in = payload.get("import") or {}
@@ -441,6 +452,9 @@ def new_recipe_from_payload(
             return existing, False
 
     data: dict[str, Any] = {"status": STATUS_QUEUED}
+    if shared and not payload.get("import"):
+        # What the share sheet sent, kept for repairs and debugging.
+        data["shared"] = shared[:6000]
     if url:
         data["source"] = {"url": url, "platform": sources.detect_platform(url)}
     if payload.get("import"):

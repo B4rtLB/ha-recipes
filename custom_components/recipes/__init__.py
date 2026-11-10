@@ -70,6 +70,22 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         if data is None:
             raise vol.Invalid("Recipes is not set up")
         recipes = sorted(data.store.recipes.values(), key=lambda r: r.get("created") or "", reverse=True)
+        if call.data.get("id"):
+            r = data.store.recipes.get(call.data["id"])
+            if r is None:
+                raise vol.Invalid("Unknown recipe")
+            return {
+                "id": r["id"],
+                "title": r.get("title"),
+                "status": r.get("status"),
+                "source": r.get("source"),
+                "media": r.get("media"),
+                "shared": r.get("shared"),
+                "input_text": (r.get("input_text") or "")[:3000] or None,
+                "notes": r.get("pipeline_notes"),
+                "created": r.get("created"),
+                "updated": r.get("updated"),
+            }
         return {
             "webhook_path": f"/api/webhook/{data.entry.data[CONF_WEBHOOK_ID]}",
             "count": len(recipes),
@@ -81,6 +97,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
                     "progress": r.get("progress"),
                     "error": r.get("error"),
                     "platform": (r.get("source") or {}).get("platform"),
+                    "source_url": (r.get("source") or {}).get("url"),
                     "has_video": bool((r.get("media") or {}).get("video")),
                     "ingredients": sum(len(g.get("items", [])) for g in r.get("ingredient_groups") or []),
                     "steps": len(r.get("steps") or []),
@@ -116,7 +133,10 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         DOMAIN,
         "status",
         status,
-        schema=vol.Schema({vol.Optional("limit", default=20): vol.All(int, vol.Range(min=1, max=500))}),
+        schema=vol.Schema({
+            vol.Optional("limit", default=20): vol.All(int, vol.Range(min=1, max=500)),
+            vol.Optional("id"): cv.string,
+        }),
         supports_response=SupportsResponse.ONLY,
     )
 

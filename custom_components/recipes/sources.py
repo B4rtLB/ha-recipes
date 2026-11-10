@@ -39,6 +39,66 @@ def first_url(text: str) -> str | None:
     return match.group(0).rstrip(").,;!?]")
 
 
+ASSET_EXT = (
+    ".js", ".mjs", ".css", ".map", ".json", ".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp",
+    ".ico", ".woff", ".woff2", ".ttf", ".otf", ".wasm", ".xml",
+)
+ASSET_HOSTS = (
+    "tiktokcdn", "ttwstatic", "byteimg", "ibytedtos", "byteoversea", "tiktokv.", "fbcdn.net",
+    "cdninstagram.com", "akamaized.net", "fonts.googleapis.com", "fonts.gstatic.com",
+    "googletagmanager.com", "google-analytics.com", "doubleclick.net", "ytimg.com", "ggpht.com",
+)
+
+
+def is_asset_url(url: str) -> bool:
+    """A script/style/image/CDN link that can never be the recipe itself.
+
+    Some apps share a whole web page with the share sheet; "Get URLs from Input"
+    then also returns the page's script and image links.
+    """
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return True
+    host, path = parts.netloc.lower(), parts.path.lower()
+    if not host:
+        return True
+    return path.endswith(ASSET_EXT) or any(h in host for h in ASSET_HOSTS)
+
+
+def is_post_url(url: str) -> bool:
+    """A link to a single TikTok / Instagram / YouTube post."""
+    parts = urlsplit(url)
+    host, path = parts.netloc.lower(), parts.path.lower()
+    if host.endswith("tiktok.com"):
+        return host.split(".")[0] in ("vm", "vt") or "/video/" in path or "/photo/" in path or path.startswith("/t/")
+    if "instagram.com" in host:
+        return any(f"/{k}/" in path for k in ("p", "reel", "reels", "tv"))
+    if "youtu.be" in host:
+        return len(path) > 1
+    if "youtube.com" in host:
+        return path.startswith(("/shorts/", "/watch"))
+    return False
+
+
+def best_url(*texts: str | None) -> str | None:
+    """Pick the recipe link out of everything that was shared.
+
+    Script/image/CDN links are skipped; a TikTok/Instagram/YouTube post wins
+    over other links, otherwise the first remaining link is used.
+    """
+    found: list[str] = []
+    for text in texts:
+        for match in URL_RE.finditer(text or ""):
+            url = match.group(0).rstrip(").,;!?]")
+            if url not in found and not is_asset_url(url):
+                found.append(url)
+    posts = [u for u in found if is_post_url(u)]
+    if posts:
+        return posts[0]
+    return found[0] if found else None
+
+
 @dataclass
 class SourceContent:
     """What we found at the source, ready for the AI step."""

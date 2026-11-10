@@ -124,7 +124,8 @@ function genArt(title, big = false) {
   const a = h % 360, b = (a + 35 + (h >> 9) % 60) % 360;
   const style = `background: radial-gradient(120% 90% at 0% 0%, hsl(${a} 80% 58%), transparent 60%),
     radial-gradient(120% 120% at 100% 100%, hsl(${b} 75% 42%), transparent 65%), hsl(${(a + b) / 2} 55% 22%);`;
-  return `<div class="gen-art ${big ? "big" : ""}" style="${style}">${esc(title || "")}</div>`;
+  // On the recipe page the real title sits right below, so the big version has no text.
+  return `<div class="gen-art ${big ? "big" : ""}" style="${style}">${big ? "" : esc(title || "")}</div>`;
 }
 
 function minutesLabel(min) {

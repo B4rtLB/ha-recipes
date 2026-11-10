@@ -56,6 +56,10 @@
         "limit": {
           "name": "Limit",
           "description": "How many recipes to return."
+        },
+        "id": {
+          "name": "Recipe ID",
+          "description": "Return details of one recipe instead of the list."
         }
       }
     },
