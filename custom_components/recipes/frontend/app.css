@@ -191,6 +191,10 @@ img { display: block; }
 }
 .pl-card.disabled { opacity: 0.5; cursor: default; }
 .pl-card.disabled .pl-art { background: var(--bg-elev); }
+.pl-bonus {
+  background: radial-gradient(120% 90% at 0% 0%, hsl(150 60% 44%), transparent 62%),
+    radial-gradient(120% 120% at 100% 100%, hsl(45 85% 48%), transparent 66%), hsl(165 45% 20%);
+}
 .pl-soon-a { background: linear-gradient(145deg, hsl(215 18% 24%), hsl(215 18% 15%)); }
 .pl-soon-b { background: linear-gradient(145deg, hsl(160 14% 22%), hsl(160 14% 14%)); }
 .pl-card.disabled .pl-art svg { width: 28px; height: 28px; opacity: 0.45; filter: none; }
@@ -198,7 +202,29 @@ img { display: block; }
 /* shuffle session: horizontal swipes belong to us, vertical ones to the browser */
 .detail.shuffling { touch-action: pan-y; }
 .detail.slide-in > :not(.nav-bar):not(.nav-float) { animation: slide-in 0.38s var(--ease) backwards; }
+.detail.slide-in-back > :not(.nav-bar):not(.nav-float) { animation: slide-in-back 0.38s var(--ease) backwards; }
+@keyframes slide-in-back { from { opacity: 0; transform: translateX(-40vw); } to { opacity: 1; transform: none; } }
 @keyframes slide-in { from { opacity: 0; transform: translateX(40vw); } to { opacity: 1; transform: none; } }
+
+/* ingredients on offer: a soft glow in the supermarket's colour, plus a pill with its name */
+:root { --s-ah: #4cc3ff; --s-jumbo: #ffd21f; --s-lidl: #3a78e8; --s-dirk: #ff4a3d; }
+.ing.deal-ah { --deal: var(--s-ah); } .ing.deal-jumbo { --deal: var(--s-jumbo); }
+.ing.deal-lidl { --deal: var(--s-lidl); } .ing.deal-dirk { --deal: var(--s-dirk); }
+.ing.deal {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--deal) 16%, transparent), transparent 75%);
+  border-radius: 10px; margin: 0 -10px; padding-left: 10px; padding-right: 10px;
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--deal) 55%, transparent);
+}
+.ing.deal .txt { text-shadow: 0 0 14px color-mix(in srgb, var(--deal) 45%, transparent); }
+.deal-info { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 4px; text-shadow: none; }
+.deal-pill {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; line-height: 1;
+  padding: 4px 8px 4px 6px; border-radius: 10px; color: var(--label); background: rgba(255, 255, 255, 0.08);
+}
+.deal-pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; }
+.deal-price { font-weight: 500; color: var(--label-2); white-space: pre-wrap; }
+.deal-pill.s-ah { --c: var(--s-ah); } .deal-pill.s-jumbo { --c: var(--s-jumbo); }
+.deal-pill.s-lidl { --c: var(--s-lidl); } .deal-pill.s-dirk { --c: var(--s-dirk); }
 
 /* generated artwork when there is no photo */
 .gen-art {

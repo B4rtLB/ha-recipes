@@ -167,7 +167,7 @@ const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails.p
       snap: getComputedStyle(row).scrollSnapType,
       titles: [...row.querySelectorAll('.card-title')].map((e) => e.textContent), dis: row.querySelectorAll('[aria-disabled="true"]').length };
   });
-  ok(pl.n === 3 && pl.titles.join() === 'Shuffle,Playlist 2,Playlist 3' && pl.dis === 2, `three playlist tiles ${pl.titles}`);
+  ok(pl.n === 3 && pl.titles.join() === 'Shuffle,Bonus,Playlist 3' && pl.dis === 2, `three playlist tiles ${pl.titles}`);
   ok(pl.ord, 'row sits between chips and grid');
   ok(pl.snap.startsWith('x'), `row snaps horizontally (${pl.snap})`);
   await shot('12-playlists');
@@ -198,7 +198,7 @@ const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails.p
     ok(second && second !== seen[0], `swipe left goes to another recipe ${seen[0]} -> ${second}`);
     ok(await page.$('.detail.shuffling'), 'still a shuffle session after the swipe');
     seen.push(second);
-    for (let i = 0; i < Math.min(total, 6); i++) {
+    for (let i = 0; i < Math.min(total, 4); i++) {
       await swipe(340, 60, 500, 505);
       await page.waitForTimeout(1000);
       const id = await idOf();
@@ -206,12 +206,28 @@ const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails.p
       seen.push(id);
     }
     await shot('14-shuffle-next');
-    // a vertical drag or a swipe to the right must not change the recipe
+    // history: model of the last 5 (hist[0..n], pos); swipe right = back, left = forward / new
+    const hist = [seen[seen.length - 1]]; let pos = 0;
+    const step = async (dir) => {
+      const before = await idOf();
+      if (dir > 0) await swipe(340, 60, 500, 505); else await swipe(60, 340, 500, 505);
+      await page.waitForTimeout(1000);
+      const id = await idOf();
+      if (dir < 0) { if (pos > 0) { pos--; return id === hist[pos] ? '' : `back expected ${hist[pos]} got ${id}`; } return id === before ? '' : 'back at the start must stay'; }
+      if (pos < hist.length - 1) { pos++; return id === hist[pos] ? '' : `forward expected ${hist[pos]} got ${id}`; }
+      hist.push(id); pos++; if (hist.length > 6) { hist.shift(); pos--; }
+      return id !== before ? '' : 'new recipe equals the one before';
+    };
+    const errs = [];
+    for (const dir of [1, 1, 1, 1, 1, 1, 1, -1, -1, 1, -1, -1, -1, -1, -1, -1, -1, 1, 1, 1]) { const e = await step(dir); if (e) errs.push(e); }
+    ok(errs.length === 0, `swipe history back/forward over the last 5 ${errs.join('; ')}`);
+    ok(total < 3 || new Set(hist).size > 1, 'history holds several recipes');
+    await shot('14b-shuffle-history');
+    // a vertical drag does not change the recipe
     const before = await idOf();
     await swipe(200, 200, 600, 300);
-    await swipe(60, 340, 500, 500);
     await page.waitForTimeout(700);
-    ok((await idOf()) === before, 'vertical drag and swipe right keep the recipe');
+    ok((await idOf()) === before, 'vertical drag keeps the recipe');
     // Back leaves the session for the library
     await page.evaluate(() => history.back());
     await page.waitForSelector('.pl-row');
@@ -223,6 +239,50 @@ const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails.p
     await page.waitForTimeout(900);
     ok((await idOf()) === plain && !(await page.$('.detail.shuffling')), 'no swipe outside a shuffle session');
   }
+  await page.evaluate(() => { location.hash = '#/'; });
+  await page.waitForSelector('.pl-row');
+
+  // Bonus playlist + highlights (invented discounts, fed through the admin API)
+  ok(await page.$eval('[data-pl-off="bonus"] .card-sub', (e) => e.textContent) === 'No offers yet', 'Bonus is disabled without offers');
+  await shot('15-bonus-disabled');
+  const feed = (store, items) => page.evaluate(async ([store, items]) => {
+    const t = JSON.parse(localStorage.getItem('recipes.auth')).access;
+    const day = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+    const r = await fetch('/api/recipes/discounts/' + store, { method: 'PUT', headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ valid_from: day(-1), valid_to: day(6), items }) });
+    return r.status;
+  }, [store, items]);
+  ok(await feed('ah', [{ name: 'Kippendij', terms: ['kippendij', 'chicken thigh'], price: '€5.49', was: '€6.99', note: 'invented offer' }]) === 200, 'discounts fed (ah)');
+  ok(await feed('jumbo', [{ name: 'Chicken thigh fillet', terms: ['chicken thigh'], price: '€4.89' }]) === 200, 'discounts fed (jumbo)');
+  ok(await feed('lidl', [{ name: 'Kippendij', terms: ['chicken thigh'], price: '€5.99' }]) === 200, 'discounts fed (lidl)');
+  ok(await feed('dirk', [{ name: 'Kippendij', terms: ['chicken thigh'], price: '€6.19' }]) === 200, 'discounts fed (dirk)');
+  await page.reload();
+  await page.waitForSelector('.pl-row');
+  const onOffer = await page.evaluate(async () => {
+    const t = JSON.parse(localStorage.getItem('recipes.auth')).access;
+    const d = await (await fetch('/api/recipes/discounts', { headers: { Authorization: 'Bearer ' + t } })).json();
+    return Object.keys(d.recipes).length;
+  });
+  const bsub = await page.$eval('[data-pl="bonus"] .card-sub', (e) => e.textContent);
+  ok(onOffer > 0 && bsub === `${onOffer} recipe${onOffer === 1 ? '' : 's'} on offer`, `Bonus card count: ${bsub}`);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForTimeout(500);
+  await shot('16-bonus-enabled');
+  await page.click('[data-pl="bonus"]');
+  await page.waitForSelector('.detail.shuffling .deal');
+  await page.waitForTimeout(800);
+  const glow = await page.evaluate(() => {
+    const li = document.querySelector('.ing.deal');
+    return { cls: li.className, bg: getComputedStyle(li).backgroundImage, shadow: getComputedStyle(li.querySelector('.txt')).textShadow,
+      pills: [...li.querySelectorAll('.deal-pill')].map((p) => p.textContent.trim()), dots: [...li.querySelectorAll('.deal-pill i')].map((i) => getComputedStyle(i).backgroundColor) };
+  });
+  ok(glow.cls.includes('deal-jumbo'), `glow in the cheapest store (${glow.cls})`);
+  ok(glow.bg !== 'none' && glow.shadow !== 'none', 'ingredient has a glow');
+  ok(glow.pills.length === 4 && glow.pills[0].startsWith('AH') && glow.pills[1].startsWith('Jumbo') && glow.pills[2].startsWith('Lidl') && glow.pills[3].startsWith('Dirk'), `store names next to the dots ${glow.pills.map((p) => p.slice(0, 14))}`);
+  ok(new Set(glow.dots).size === 4, `four store colours ${glow.dots}`);
+  await page.locator('.ing.deal').first().scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
+  await shot('17-ingredient-highlight');
   await page.evaluate(() => { location.hash = '#/'; });
   await page.waitForSelector('.pl-row');
 
@@ -259,6 +319,10 @@ const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails.p
   await wp.waitForTimeout(600);
   await wp.screenshot({ path: path.join(out, '11-wide-sheet.png') });
 
+  await page.evaluate(async () => {
+    const t = JSON.parse(localStorage.getItem('recipes.auth')).access;
+    for (const k of ['ah', 'jumbo', 'lidl', 'dirk']) await fetch('/api/recipes/discounts/' + k, { method: 'DELETE', headers: { Authorization: 'Bearer ' + t } });
+  });
   ok(errors.length === 0, `no page errors ${errors}`);
   await browser.close();
   console.log('Screenshots in', out);

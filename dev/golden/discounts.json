@@ -1,0 +1,774 @@
+{
+ "kind": "discount",
+ "cases": [
+  {
+   "name": "exact term",
+   "input": {
+    "ingredient": "chicken breast",
+    "stores": {
+     "ah": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Kipfilet",
+        "terms": [
+         "kipfilet",
+         "chicken breast",
+         "chicken fillet"
+        ],
+        "price": "€4.99",
+        "was": "€6.49"
+       },
+       {
+        "name": "Tomaten",
+        "terms": [
+         "tomaat",
+         "tomaten",
+         "tomato"
+        ],
+        "price": "€1.29"
+       },
+       {
+        "name": "Roomkaas",
+        "terms": [
+         "cream cheese",
+         "roomkaas"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "expected": {
+    "offers": [
+     [
+      "ah",
+      "Kipfilet"
+     ]
+    ],
+    "best": "ah"
+   }
+  },
+  {
+   "name": "term inside a longer line",
+   "input": {
+    "ingredient": "boneless chicken breast, diced",
+    "stores": {
+     "ah": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Kipfilet",
+        "terms": [
+         "kipfilet",
+         "chicken breast",
+         "chicken fillet"
+        ],
+        "price": "€4.99",
+        "was": "€6.49"
+       },
+       {
+        "name": "Tomaten",
+        "terms": [
+         "tomaat",
+         "tomaten",
+         "tomato"
+        ],
+        "price": "€1.29"
+       },
+       {
+        "name": "Roomkaas",
+        "terms": [
+         "cream cheese",
+         "roomkaas"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "expected": {
+    "offers": [
+     [
+      "ah",
+      "Kipfilet"
+     ]
+    ],
+    "best": "ah"
+   }
+  },
+  {
+   "name": "cheapest store wins",
+   "input": {
+    "ingredient": "chicken breast",
+    "stores": {
+     "ah": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Kipfilet",
+        "terms": [
+         "kipfilet",
+         "chicken breast",
+         "chicken fillet"
+        ],
+        "price": "€4.99",
+        "was": "€6.49"
+       },
+       {
+        "name": "Tomaten",
+        "terms": [
+         "tomaat",
+         "tomaten",
+         "tomato"
+        ],
+        "price": "€1.29"
+       },
+       {
+        "name": "Roomkaas",
+        "terms": [
+         "cream cheese",
+         "roomkaas"
+        ]
+       }
+      ]
+     },
+     "jumbo": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Chicken breast fillet",
+        "terms": [
+         "chicken breast"
+        ],
+        "price": "3,99"
+       },
+       {
+        "name": "Eieren",
+        "terms": [
+         "ei",
+         "eieren",
+         "egg"
+        ],
+        "price": "€2.10"
+       }
+      ]
+     }
+    }
+   },
+   "expected": {
+    "offers": [
+     [
+      "ah",
+      "Kipfilet"
+     ],
+     [
+      "jumbo",
+      "Chicken breast fillet"
+     ]
+    ],
+    "best": "jumbo"
+   }
+  },
+  {
+   "name": "no price on one store: first store",
+   "input": {
+    "ingredient": "chicken breast",
+    "stores": {
+     "ah": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Kipfilet",
+        "terms": [
+         "kipfilet",
+         "chicken breast",
+         "chicken fillet"
+        ],
+        "price": "€4.99",
+        "was": "€6.49"
+       },
+       {
+        "name": "Tomaten",
+        "terms": [
+         "tomaat",
+         "tomaten",
+         "tomato"
+        ],
+        "price": "€1.29"
+       },
+       {
+        "name": "Roomkaas",
+        "terms": [
+         "cream cheese",
+         "roomkaas"
+        ]
+       }
+      ]
+     },
+     "jumbo": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "x",
+        "terms": [
+         "chicken breast"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "expected": {
+    "offers": [
+     [
+      "ah",
+      "Kipfilet"
+     ],
+     [
+      "jumbo",
+      "x"
+     ]
+    ],
+    "best": "ah"
+   }
+  },
+  {
+   "name": "plural ingredient, singular term",
+   "input": {
+    "ingredient": "tomatoes",
+    "stores": {
+     "ah": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Kipfilet",
+        "terms": [
+         "kipfilet",
+         "chicken breast",
+         "chicken fillet"
+        ],
+        "price": "€4.99",
+        "was": "€6.49"
+       },
+       {
+        "name": "Tomaten",
+        "terms": [
+         "tomaat",
+         "tomaten",
+         "tomato"
+        ],
+        "price": "€1.29"
+       },
+       {
+        "name": "Roomkaas",
+        "terms": [
+         "cream cheese",
+         "roomkaas"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "expected": {
+    "offers": [
+     [
+      "ah",
+      "Tomaten"
+     ]
+    ],
+    "best": "ah"
+   }
+  },
+  {
+   "name": "plural term, singular ingredient",
+   "input": {
+    "ingredient": "egg",
+    "stores": {
+     "jumbo": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Chicken breast fillet",
+        "terms": [
+         "chicken breast"
+        ],
+        "price": "3,99"
+       },
+       {
+        "name": "Eieren",
+        "terms": [
+         "ei",
+         "eieren",
+         "egg"
+        ],
+        "price": "€2.10"
+       }
+      ]
+     }
+    }
+   },
+   "expected": {
+    "offers": [
+     [
+      "jumbo",
+      "Eieren"
+     ]
+    ],
+    "best": "jumbo"
+   }
+  },
+  {
+   "name": "Dutch term in English recipe with accents",
+   "input": {
+    "ingredient": "Crème fraîche",
+    "stores": {
+     "ah": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Crème fraîche",
+        "terms": [
+         "creme fraiche"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "expected": {
+    "offers": [
+     [
+      "ah",
+      "Crème fraîche"
+     ]
+    ],
+    "best": "ah"
+   }
+  },
+  {
+   "name": "all tokens required",
+   "input": {
+    "ingredient": "chicken thighs",
+    "stores": {
+     "ah": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Kipfilet",
+        "terms": [
+         "kipfilet",
+         "chicken breast",
+         "chicken fillet"
+        ],
+        "price": "€4.99",
+        "was": "€6.49"
+       },
+       {
+        "name": "Tomaten",
+        "terms": [
+         "tomaat",
+         "tomaten",
+         "tomato"
+        ],
+        "price": "€1.29"
+       },
+       {
+        "name": "Roomkaas",
+        "terms": [
+         "cream cheese",
+         "roomkaas"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "expected": {
+    "offers": [],
+    "best": null
+   }
+  },
+  {
+   "name": "whole words only",
+   "input": {
+    "ingredient": "chickenbreast fillets",
+    "stores": {
+     "ah": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Kipfilet",
+        "terms": [
+         "kipfilet",
+         "chicken breast",
+         "chicken fillet"
+        ],
+        "price": "€4.99",
+        "was": "€6.49"
+       },
+       {
+        "name": "Tomaten",
+        "terms": [
+         "tomaat",
+         "tomaten",
+         "tomato"
+        ],
+        "price": "€1.29"
+       },
+       {
+        "name": "Roomkaas",
+        "terms": [
+         "cream cheese",
+         "roomkaas"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "expected": {
+    "offers": [],
+    "best": null
+   }
+  },
+  {
+   "name": "cream cheese is two words",
+   "input": {
+    "ingredient": "cream cheese, softened",
+    "stores": {
+     "ah": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Kipfilet",
+        "terms": [
+         "kipfilet",
+         "chicken breast",
+         "chicken fillet"
+        ],
+        "price": "€4.99",
+        "was": "€6.49"
+       },
+       {
+        "name": "Tomaten",
+        "terms": [
+         "tomaat",
+         "tomaten",
+         "tomato"
+        ],
+        "price": "€1.29"
+       },
+       {
+        "name": "Roomkaas",
+        "terms": [
+         "cream cheese",
+         "roomkaas"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "expected": {
+    "offers": [
+     [
+      "ah",
+      "Roomkaas"
+     ]
+    ],
+    "best": "ah"
+   }
+  },
+  {
+   "name": "broad term matches every chicken line (documented)",
+   "input": {
+    "ingredient": "chicken thighs",
+    "stores": {
+     "dirk": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Kip",
+        "terms": [
+         "chicken"
+        ],
+        "note": "too broad on purpose"
+       }
+      ]
+     }
+    }
+   },
+   "expected": {
+    "offers": [
+     [
+      "dirk",
+      "Kip"
+     ]
+    ],
+    "best": "dirk"
+   }
+  },
+  {
+   "name": "expired list is ignored",
+   "input": {
+    "ingredient": "basmati rice",
+    "stores": {
+     "lidl": {
+      "valid_from": "2026-11-02",
+      "valid_to": "2026-11-08",
+      "items": [
+       {
+        "name": "Rijst",
+        "terms": [
+         "rice",
+         "rijst",
+         "basmati rice"
+        ],
+        "price": "€1.50"
+       }
+      ]
+     }
+    }
+   },
+   "expected": {
+    "offers": [],
+    "best": null
+   }
+  },
+  {
+   "name": "lidl valid on its last day",
+   "input": {
+    "ingredient": "basmati rice",
+    "stores": {
+     "lidl": {
+      "valid_from": "2026-11-02",
+      "valid_to": "2026-11-08",
+      "items": [
+       {
+        "name": "Rijst",
+        "terms": [
+         "rice",
+         "rijst",
+         "basmati rice"
+        ],
+        "price": "€1.50"
+       }
+      ]
+     }
+    },
+    "today": "2026-11-08"
+   },
+   "expected": {
+    "offers": [
+     [
+      "lidl",
+      "Rijst"
+     ]
+    ],
+    "best": "lidl"
+   }
+  },
+  {
+   "name": "nothing matches",
+   "input": {
+    "ingredient": "olive oil",
+    "stores": {
+     "ah": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Kipfilet",
+        "terms": [
+         "kipfilet",
+         "chicken breast",
+         "chicken fillet"
+        ],
+        "price": "€4.99",
+        "was": "€6.49"
+       },
+       {
+        "name": "Tomaten",
+        "terms": [
+         "tomaat",
+         "tomaten",
+         "tomato"
+        ],
+        "price": "€1.29"
+       },
+       {
+        "name": "Roomkaas",
+        "terms": [
+         "cream cheese",
+         "roomkaas"
+        ]
+       }
+      ]
+     },
+     "jumbo": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Chicken breast fillet",
+        "terms": [
+         "chicken breast"
+        ],
+        "price": "3,99"
+       },
+       {
+        "name": "Eieren",
+        "terms": [
+         "ei",
+         "eieren",
+         "egg"
+        ],
+        "price": "€2.10"
+       }
+      ]
+     },
+     "lidl": {
+      "valid_from": "2026-11-02",
+      "valid_to": "2026-11-08",
+      "items": [
+       {
+        "name": "Rijst",
+        "terms": [
+         "rice",
+         "rijst",
+         "basmati rice"
+        ],
+        "price": "€1.50"
+       }
+      ]
+     },
+     "dirk": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Kip",
+        "terms": [
+         "chicken"
+        ],
+        "note": "too broad on purpose"
+       }
+      ]
+     }
+    }
+   },
+   "expected": {
+    "offers": [],
+    "best": null
+   }
+  },
+  {
+   "name": "empty ingredient",
+   "input": {
+    "ingredient": "",
+    "stores": {
+     "ah": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Kipfilet",
+        "terms": [
+         "kipfilet",
+         "chicken breast",
+         "chicken fillet"
+        ],
+        "price": "€4.99",
+        "was": "€6.49"
+       },
+       {
+        "name": "Tomaten",
+        "terms": [
+         "tomaat",
+         "tomaten",
+         "tomato"
+        ],
+        "price": "€1.29"
+       },
+       {
+        "name": "Roomkaas",
+        "terms": [
+         "cream cheese",
+         "roomkaas"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "expected": {
+    "offers": [],
+    "best": null
+   }
+  },
+  {
+   "name": "plural of chicken still matches",
+   "input": {
+    "ingredient": "2 chickens breasts",
+    "stores": {
+     "ah": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Kipfilet",
+        "terms": [
+         "kipfilet",
+         "chicken breast",
+         "chicken fillet"
+        ],
+        "price": "€4.99",
+        "was": "€6.49"
+       },
+       {
+        "name": "Tomaten",
+        "terms": [
+         "tomaat",
+         "tomaten",
+         "tomato"
+        ],
+        "price": "€1.29"
+       },
+       {
+        "name": "Roomkaas",
+        "terms": [
+         "cream cheese",
+         "roomkaas"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "expected": {
+    "offers": [
+     [
+      "ah",
+      "Kipfilet"
+     ]
+    ],
+    "best": "ah"
+   }
+  }
+ ]
+}

@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from http import HTTPStatus
 import logging
 from pathlib import Path
 import re
 from typing import TYPE_CHECKING, Any
+from zoneinfo import ZoneInfo
 
 from aiohttp import web
 
@@ -37,6 +38,7 @@ from .const import (
     URL_APP,
     VERSION,
 )
+from . import discounts
 from .pipeline import new_recipe_from_payload, save_upload
 
 if TYPE_CHECKING:
@@ -256,6 +258,63 @@ class RecipesListView(HomeAssistantView):
         return self.json(result, HTTPStatus.CREATED if result["created"] else HTTPStatus.OK)
 
 
+def _active_discounts(hass: HomeAssistant) -> dict[str, dict[str, Any]]:
+    """Supermarkets whose discounts are valid today (Europe/Amsterdam date)."""
+    today = datetime.now(ZoneInfo("Europe/Amsterdam")).date().isoformat()
+    return discounts.active_stores(_data(hass).store.discounts.data, today)
+
+
+class DiscountsView(HomeAssistantView):
+    """GET: active discounts and, per recipe, which ingredient lines are on offer."""
+
+    url = URL_API + "/discounts"
+    name = "api:recipes:discounts"
+
+    async def get(self, request: web.Request) -> web.Response:
+        """Return active stores (validity + item count) and matches computed server-side."""
+        hass: HomeAssistant = request.app["hass"]
+        data = _data(hass).store
+        stores = _active_discounts(hass)
+        return self.json({
+            "updated": data.discounts.data.get("updated"),
+            "stores": {
+                k: {"name": discounts.STORES[k], "valid_from": e["valid_from"], "valid_to": e["valid_to"], "count": len(e["items"])}
+                for k, e in stores.items()
+            },
+            "recipes": discounts.match_all(list(data.recipes.values()), stores),
+        })
+
+
+class DiscountStoreView(HomeAssistantView):
+    """PUT/DELETE (admin): replace or clear one supermarket's list."""
+
+    url = URL_API + "/discounts/{store}"
+    name = "api:recipes:discounts:store"
+
+    async def put(self, request: web.Request, store: str) -> web.Response:
+        """Body: {"valid_from": "2026-11-09", "valid_to": "2026-11-15", "items": [{"name", "terms", "price", "was", "note"}]}."""
+        hass: HomeAssistant = request.app["hass"]
+        if not request["hass_user"].is_admin:
+            return self.json_message("Admin only", HTTPStatus.FORBIDDEN)
+        try:
+            body = await request.json()
+            entry = discounts.clean_store(store, body.get("valid_from"), body.get("valid_to"), body.get("items"))
+        except (ValueError, AttributeError) as err:
+            return self.json_message(str(err), HTTPStatus.BAD_REQUEST)
+        _data(hass).store.discounts.set_store(store, entry)
+        return self.json({"ok": True, "store": store, "items": len(entry["items"])})
+
+    async def delete(self, request: web.Request, store: str) -> web.Response:
+        """Remove one supermarket's list."""
+        hass: HomeAssistant = request.app["hass"]
+        if not request["hass_user"].is_admin:
+            return self.json_message("Admin only", HTTPStatus.FORBIDDEN)
+        if store not in discounts.STORES:
+            return self.json_message("Unknown store", HTTPStatus.BAD_REQUEST)
+        _data(hass).store.discounts.set_store(store, None)
+        return self.json({"ok": True})
+
+
 class RecipeView(HomeAssistantView):
     """Get, edit or delete one recipe."""
 
@@ -268,7 +327,9 @@ class RecipeView(HomeAssistantView):
         recipe = _data(hass).store.recipes.get(recipe_id)
         if recipe is None:
             return self.json_message("Not found", HTTPStatus.NOT_FOUND)
-        return self.json(serialize(hass, recipe, full=True))
+        out = serialize(hass, recipe, full=True)
+        out["offers"] = discounts.match_recipe(recipe, _active_discounts(hass))
+        return self.json(out)
 
     async def patch(self, request: web.Request, recipe_id: str) -> web.Response:
         """Edit simple fields."""
@@ -617,6 +678,7 @@ def register_views(hass: HomeAssistant) -> None:
     """Register all HTTP views."""
     for view in (
         AppIndexView, ServiceWorkerView, ManifestView, RecipesListView, SettingsView,
+        DiscountsView, DiscountStoreView,
         RecipeView, RecipeRetryView, RecipeShoppingView, RecipeMediaView,
         RecipeDebugView, RecipeDebugRerunView, RecipeDebugApplyView,
     ):

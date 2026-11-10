@@ -14,7 +14,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.storage import Store
 from homeassistant.util import slugify
 
-from .const import STORAGE_KEY, STORAGE_VERSION
+from .const import DISCOUNTS_STORAGE_KEY, STORAGE_KEY, STORAGE_VERSION
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,6 +36,33 @@ def media_root(hass: HomeAssistant) -> Path:
     return Path(hass.config.path("recipes_media"))
 
 
+class DiscountStore:
+    """This week's supermarket discounts in their own file (.storage/recipes.discounts).
+
+    {"updated": iso, "stores": {"ah": {"valid_from", "valid_to", "items": [...]}, ...}}
+    Replacing one supermarket never touches the others.
+    """
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        """Initialize the store."""
+        self._store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, DISCOUNTS_STORAGE_KEY)
+        self.data: dict[str, Any] = {"updated": None, "stores": {}}
+
+    async def async_load(self) -> None:
+        """Load from disk."""
+        self.data = await self._store.async_load() or {"updated": None, "stores": {}}
+        self.data.setdefault("stores", {})
+
+    def set_store(self, key: str, entry: dict[str, Any] | None) -> None:
+        """Replace (or with None remove) one supermarket's list and save."""
+        if entry is None:
+            self.data["stores"].pop(key, None)
+        else:
+            self.data["stores"][key] = entry
+        self.data["updated"] = utcnow_iso()
+        self._store.async_delay_save(lambda: self.data, 0.5)
+
+
 class RecipeStore:
     """Keeps all recipes in a single HA Store document."""
 
@@ -45,6 +72,7 @@ class RecipeStore:
         self._store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, STORAGE_KEY)
         self.recipes: dict[str, dict[str, Any]] = {}
         self.root = media_root(hass)
+        self.discounts = DiscountStore(hass)
         # Held by the pipeline while it writes into a media folder, so a folder
         # is never renamed under it.
         self.media_lock = asyncio.Lock()
@@ -53,6 +81,7 @@ class RecipeStore:
         """Load recipes from disk."""
         data = await self._store.async_load()
         self.recipes = (data or {}).get("recipes", {})
+        await self.discounts.async_load()
         # One-off cleanup: "Quick" means ready in 30 minutes or less.
         changed = False
         for recipe in self.recipes.values():

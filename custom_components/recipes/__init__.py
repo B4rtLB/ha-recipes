@@ -10,12 +10,13 @@ from pathlib import Path
 from homeassistant.components import webhook
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
 import voluptuous as vol
 
 from homeassistant.helpers import config_validation as cv
 
-from . import sources
+from . import discounts, sources
 from .const import CONF_WEBHOOK_ID, DOMAIN, URL_STATIC
 from .pipeline import RecipeProcessor, new_recipe_from_payload
 from .store import RecipeStore
@@ -128,6 +129,29 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             if rid in data.store.recipes:
                 data.processor.enqueue(rid)
 
+    async def set_discounts(call: ServiceCall) -> None:
+        data: RecipesData | None = hass.data.get(DOMAIN)
+        if data is None:
+            raise vol.Invalid("Recipes is not set up")
+        try:
+            entry = discounts.clean_store(
+                call.data["store"], call.data["valid_from"], call.data["valid_to"], call.data["items"]
+            )
+        except ValueError as err:
+            raise ServiceValidationError(str(err)) from err
+        data.store.discounts.set_store(call.data["store"], entry)
+
+    hass.services.async_register(
+        DOMAIN,
+        "set_discounts",
+        set_discounts,
+        schema=vol.Schema({
+            vol.Required("store"): vol.In(list(discounts.STORES)),
+            vol.Required("valid_from"): cv.date,
+            vol.Required("valid_to"): cv.date,
+            vol.Required("items"): list,
+        }),
+    )
     hass.services.async_register(DOMAIN, "delete", delete, schema=vol.Schema({vol.Required("id"): cv.string}))
     hass.services.async_register(DOMAIN, "retry", retry, schema=vol.Schema({vol.Optional("id"): cv.string}))
 

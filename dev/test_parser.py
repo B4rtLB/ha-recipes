@@ -24,7 +24,7 @@ def load(name):
     return mod
 
 
-parser, preprocess = load("parser"), load("preprocess")
+parser, preprocess, discounts = load("parser"), load("preprocess"), load("discounts")
 
 
 def jsonld_case(recipe):
@@ -54,6 +54,16 @@ def run(kind, case):
         return {"text": text, "timers": [[t["seconds"], t["label"]] for t in parser.find_timers(text)]}
     if kind == "prepare":
         return preprocess.prepare(value)
+    if kind == "discount":  # an ingredient name against some stores: offers + the store that glows
+        offers = discounts.match_ingredient(value["ingredient"], discounts.active_stores({"stores": value["stores"]}, value.get("today", "2026-11-10")))
+        return {"offers": [[o["store"], o["item"]] for o in offers], "best": discounts.best_offer(offers) if offers else None}
+    if kind == "discount-active":  # which stores count on a given day
+        return sorted(discounts.active_stores({"stores": value["stores"]}, value["today"]))
+    if kind == "discount-clean":  # validation: the stored entry, or the error
+        try:
+            return discounts.clean_store(*value)
+        except ValueError as err:
+            return {"error": str(err)}
     if kind == "jsonld":
         return jsonld_case(value)
     raise SystemExit(f"unknown kind {kind}")

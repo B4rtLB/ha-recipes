@@ -1,0 +1,105 @@
+{
+ "kind": "discount-clean",
+ "cases": [
+  {
+   "name": "terms default to the name",
+   "input": [
+    "ah",
+    "2026-11-09",
+    "2026-11-15",
+    [
+     {
+      "name": "Kipfilet",
+      "price": "€4.99"
+     }
+    ]
+   ],
+   "expected": {
+    "valid_from": "2026-11-09",
+    "valid_to": "2026-11-15",
+    "items": [
+     {
+      "name": "Kipfilet",
+      "terms": [
+       "Kipfilet"
+      ],
+      "price": "€4.99"
+     }
+    ]
+   }
+  },
+  {
+   "name": "unknown store",
+   "input": [
+    "spar",
+    "2026-11-09",
+    "2026-11-15",
+    []
+   ],
+   "expected": {
+    "error": "Unknown store 'spar'; use one of ah, jumbo, lidl, dirk"
+   }
+  },
+  {
+   "name": "bad date",
+   "input": [
+    "ah",
+    "soon",
+    "2026-11-15",
+    []
+   ],
+   "expected": {
+    "error": "valid_from and valid_to must be dates like 2026-11-09"
+   }
+  },
+  {
+   "name": "end before start",
+   "input": [
+    "ah",
+    "2026-11-15",
+    "2026-11-09",
+    []
+   ],
+   "expected": {
+    "error": "valid_to is before valid_from"
+   }
+  },
+  {
+   "name": "item without name",
+   "input": [
+    "ah",
+    "2026-11-09",
+    "2026-11-15",
+    [
+     {
+      "terms": [
+       "x"
+      ]
+     }
+    ]
+   ],
+   "expected": {
+    "error": "item 0 needs a name"
+   }
+  },
+  {
+   "name": "terms without words",
+   "input": [
+    "ah",
+    "2026-11-09",
+    "2026-11-15",
+    [
+     {
+      "name": "X",
+      "terms": [
+       "!!"
+      ]
+     }
+    ]
+   ],
+   "expected": {
+    "error": "item 'X': terms must be a list with at least one keyword"
+   }
+  }
+ ]
+}

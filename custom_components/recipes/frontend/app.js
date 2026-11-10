@@ -46,6 +46,7 @@ const I = {
   photo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="M21 15l-5-4.5L7 19"/></svg>',
   cart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h2.5l2.2 10.5a1.5 1.5 0 0 0 1.5 1.2h7.9a1.5 1.5 0 0 0 1.5-1.1L20.5 8H6.3"/><circle cx="10" cy="20" r="1.3"/><circle cx="17" cy="20" r="1.3"/></svg>',
   code: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 7L3.5 12l5 5M15.5 7l5 5-5 5"/></svg>',
+  tag: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12.2V4.5a1 1 0 0 1 1-1h7.7a1 1 0 0 1 .7.3l7.6 7.6a1.5 1.5 0 0 1 0 2.1l-6.2 6.2a1.5 1.5 0 0 1-2.1 0L3.8 12.9a1 1 0 0 1-.3-.7z"/><circle cx="8.3" cy="8.3" r="1.4" fill="currentColor"/></svg>',
   shuffle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h3.5c5 0 6 10 11 10H21M3 17h3.5c1.8 0 3-1 4-2.2M13.5 9.2C14.5 8 15.7 7 17.5 7H21M18.5 4L21.5 7l-3 3M18.5 14l3 3-3 3"/></svg>',
   paste: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="5" y="4.5" width="14" height="16.5" rx="2.5"/><path d="M9 4.5V3h6v1.5"/></svg>',
 };
@@ -190,6 +191,7 @@ const state = {
   search: "",
   searching: false,
   current: null,
+  discounts: null, // {stores, recipes}: this week's offers, matched server-side
   shuffle: null, // {pool, queue, last, busy}: set while a shuffle session runs
   admin: false,
 };
@@ -227,6 +229,7 @@ const ScrollLock = {
 async function loadList() {
   const data = await api("");
   state.recipes = data.recipes;
+  await loadDiscounts();
   schedulePoll();
   return state.recipes;
 }
@@ -368,10 +371,29 @@ async function renderLibrary(fetch_ = true) {
 }
 
 // ------------------------------------------------------------------ playlists
-// A row of tiles between the filter chips and the grid. The first one is a
-// shuffle: it opens a random recipe, and while that session lasts a swipe from
-// right to left on the recipe page moves on to the next random one. The other
-// two are placeholders.
+// A row of tiles between the filter chips and the grid. Shuffle opens a random
+// recipe (of the filtered list) and starts a session; Bonus does the same over
+// the recipes with ingredients on offer this week. In a session a swipe from
+// right to left goes forward (through the history, then on to a new random
+// recipe), a swipe from left to right goes back through the last 5. The third
+// tile is a placeholder.
+const HISTORY = 5; // how many recipes you can go back
+
+const STORE_SHORT = { ah: "AH", jumbo: "Jumbo", lidl: "Lidl", dirk: "Dirk" };
+const STORE_NAME = { ah: "Albert Heijn", jumbo: "Jumbo", lidl: "Lidl", dirk: "Dirk" };
+
+async function loadDiscounts() {
+  try { state.discounts = await api("/discounts"); } catch { state.discounts = state.discounts || null; }
+}
+
+// Recipes (ready) that have at least one ingredient on offer, most offers first.
+function bonusRecipes() {
+  const d = state.discounts;
+  if (!d || !Object.keys(d.stores || {}).length) return [];
+  return (state.recipes || []).filter((r) => r.status === "ready" && d.recipes?.[r.id])
+    .sort((a, b) => d.recipes[b.id].count - d.recipes[a.id].count);
+}
+
 function shufflePool() {
   const ready = (r) => r.status === "ready";
   const filtered = visibleRecipes().filter(ready);
@@ -382,14 +404,19 @@ function playlistsHTML() {
   if (state.searching || !(state.recipes || []).some((r) => r.status === "ready")) return "";
   const n = shufflePool().length;
   const sub = `${n} recipe${n === 1 ? "" : "s"}${state.filters.size && visibleRecipes().some((r) => r.status === "ready") ? " · filtered" : ""}`;
+  const b = bonusRecipes().length;
+  const bonusSub = b ? `${b} recipe${b === 1 ? "" : "s"} on offer` : "No offers yet";
   return `<div class="section-head"><h2>Playlists</h2></div>
   <div class="pl-row" role="list">
     <button class="pl-card" role="listitem" data-pl="shuffle" aria-label="Shuffle, ${esc(sub)}">
       <div class="art pl-art pl-shuffle">${I.shuffle}</div>
       <div class="card-title">Shuffle</div><div class="card-sub">${esc(sub)}</div></button>
-    <div class="pl-card disabled" role="listitem" aria-disabled="true">
-      <div class="art pl-art pl-soon-a"><span>${I.plus}</span></div>
-      <div class="card-title">Playlist 2</div><div class="card-sub">Coming soon</div></div>
+    ${b ? `<button class="pl-card" role="listitem" data-pl="bonus" aria-label="Bonus, ${esc(bonusSub)}">
+      <div class="art pl-art pl-bonus">${I.tag}</div>
+      <div class="card-title">Bonus</div><div class="card-sub">${esc(bonusSub)}</div></button>`
+    : `<div class="pl-card disabled" role="listitem" aria-disabled="true" data-pl-off="bonus">
+      <div class="art pl-art pl-bonus">${I.tag}</div>
+      <div class="card-title">Bonus</div><div class="card-sub">${esc(bonusSub)}</div></div>`}
     <div class="pl-card disabled" role="listitem" aria-disabled="true">
       <div class="art pl-art pl-soon-b"><span>${I.plus}</span></div>
       <div class="card-title">Playlist 3</div><div class="card-sub">Coming soon</div></div>
@@ -397,7 +424,7 @@ function playlistsHTML() {
 }
 
 // The queue is a shuffled "bag": every recipe once before any repeats, and a
-// new bag never starts with the recipe that just ended the old one.
+// new bag never starts with the recipe that was just shown.
 function shuffleBag(ids, last) {
   const a = ids.slice();
   for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
@@ -409,62 +436,83 @@ function nextShuffleId() {
   const sh = state.shuffle;
   if (!sh) return null;
   const alive = new Set((state.recipes || []).filter((r) => r.status === "ready").map((r) => r.id));
-  if (!sh.queue.length) sh.queue = shuffleBag([...sh.pool].filter((id) => alive.has(id)), sh.last);
+  const last = sh.hist[sh.hist.length - 1];
+  if (!sh.queue.length) sh.queue = shuffleBag(sh.pool.filter((id) => alive.has(id)), last);
   let id;
   while ((id = sh.queue.shift()) && !alive.has(id)) { /* deleted meanwhile */ }
-  if (!id && sh.queue.length === 0) return null;
-  return id;
+  return id || null;
+}
+
+function startSession(kind, pool, first) {
+  state.shuffle = { kind, pool, queue: first ? [first, ...shuffleBag(pool.filter((i) => i !== first), first)] : [], hist: [], pos: 0, busy: false, hinted: false };
+  const id = nextShuffleId();
+  state.shuffle.hist = [id];
+  location.hash = "#/r/" + id;
 }
 
 function startShuffle() {
   const pool = shufflePool().map((r) => r.id);
   if (!pool.length) { toast("Nothing to shuffle yet"); return; }
-  state.shuffle = { pool, queue: [], last: null, busy: false, hinted: false };
-  const id = nextShuffleId();
-  state.shuffle.last = id;
-  location.hash = "#/r/" + id;
+  startSession("shuffle", pool);
 }
 
-const SWIPE_FREE = "> :not(.nav-bar):not(.nav-float)"; // fixed children must not sit inside a transform
+function startBonus() {
+  const list = bonusRecipes();
+  if (!list.length) { toast("No offers yet"); return; }
+  // open with a recipe that has the most discounted ingredients, the rest in random order
+  const top = list.filter((r) => state.discounts.recipes[r.id].count === state.discounts.recipes[list[0].id].count);
+  startSession("bonus", list.map((r) => r.id), top[Math.floor(Math.random() * top.length)].id);
+}
 
-async function shuffleNext() {
+const detailParts = (det) => [...det.children].filter((c) => !c.matches(".nav-bar, .nav-float")); // fixed children must not sit inside a transform
+
+// dir: 1 = forward (swipe right to left), -1 = back (left to right)
+async function shuffleGo(dir) {
   const sh = state.shuffle, det = $(".detail");
   if (!sh || sh.busy || !det) return;
-  const id = nextShuffleId();
-  if (!id) return;
-  if (sh.pool.length < 2 || id === sh.last) { toast("That's the only recipe in this shuffle"); swipeReset(det); return; }
+  let id, pos = sh.pos + dir, fresh = false;
+  if (dir < 0) {
+    if (sh.pos <= 0) { swipeReset(det); return; }
+    id = sh.hist[pos];
+  } else if (pos < sh.hist.length) {
+    id = sh.hist[pos];
+  } else {
+    if (sh.pool.length < 2) { toast("That's the only recipe in this shuffle"); swipeReset(det); return; }
+    id = nextShuffleId(); fresh = true;
+    if (!id || id === sh.hist[sh.pos]) { swipeReset(det); return; }
+  }
   sh.busy = true;
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const parts = [...det.children].filter((c) => !c.matches(".nav-bar, .nav-float"));
+  const parts = detailParts(det);
   const fetched = api("/" + id).catch((err) => { toast(err.message); return null; });
   if (!reduce) {
-    parts.forEach((c) => { c.style.transition = "transform 0.22s var(--ease), opacity 0.22s var(--ease)"; c.style.transform = "translateX(-60vw)"; c.style.opacity = "0"; });
+    parts.forEach((c) => { c.style.transition = "transform 0.22s var(--ease), opacity 0.22s var(--ease)"; c.style.transform = `translateX(${-dir * 60}vw)`; c.style.opacity = "0"; });
     await new Promise((res) => setTimeout(res, 230));
   }
   const r = await fetched;
   if (!r || route().name !== "detail" || !state.shuffle) { sh.busy = false; parts.forEach((c) => { c.style.transform = c.style.opacity = c.style.transition = ""; }); return; }
-  sh.last = id;
+  if (fresh) { sh.hist.push(id); if (sh.hist.length > HISTORY + 1) { sh.hist.shift(); pos--; } }
+  sh.pos = pos;
   history.replaceState(null, "", "#/r/" + id); // Back goes to the library, not through the shuffle
   cleanupDetail();
   $("#sheet-root").innerHTML = "";
-  await renderDetail(id, { slide: true, data: r });
+  await renderDetail(id, { slide: dir, data: r });
   sh.busy = false;
 }
 
 function swipeReset(det) {
-  [...det.children].filter((c) => !c.matches(".nav-bar, .nav-float")).forEach((c) => { c.style.transition = "transform 0.3s var(--spring)"; c.style.transform = ""; });
+  detailParts(det).forEach((c) => { c.style.transition = "transform 0.3s var(--spring), opacity 0.3s"; c.style.transform = ""; c.style.opacity = ""; });
   setTimeout(() => [...det.children].forEach((c) => { c.style.transition = ""; }), 320);
 }
 
-// Right-to-left swipe while a shuffle session runs. Only a clearly horizontal
-// move counts, so vertical scrolling, the hero pull-down and the video scrub
-// bar keep working; the page follows the finger a little as feedback.
+// Swipes while a shuffle session runs. Only a clearly horizontal move counts, so
+// vertical scrolling, the hero pull-down and the video scrub bar keep working;
+// the page follows the finger a little as feedback.
 function setupShuffleSwipe() {
   if (!state.shuffle) return;
   const det = $(".detail");
   det.classList.add("shuffling");
   let x0 = null, y0 = 0, t0 = 0, mode = "";
-  const free = () => [...det.children].filter((c) => !c.matches(".nav-bar, .nav-float"));
   const onStart = (e) => {
     mode = "";
     x0 = e.touches.length === 1 && !state.shuffle?.busy && !ScrollLock.on && !hasHorizontalScroller(e.target) ? e.touches[0].clientX : null;
@@ -480,19 +528,24 @@ function setupShuffleSwipe() {
     }
     if (e.cancelable) e.preventDefault();
     Swipe.horizontal = true;
-    const px = Math.min(0, dx) * 0.55 + Math.max(0, dx) * 0.12;
-    free().forEach((c) => { c.style.transition = "none"; c.style.transform = `translateX(${px}px)`; c.style.opacity = String(1 - Math.min(0.5, Math.abs(px) / 320)); });
+    const sh = state.shuffle, canBack = sh.pos > 0;
+    const px = dx < 0 ? dx * 0.55 : dx * (canBack ? 0.55 : 0.12);
+    detailParts(det).forEach((c) => { c.style.transition = "none"; c.style.transform = `translateX(${px}px)`; c.style.opacity = String(1 - Math.min(0.5, Math.abs(px) / 320)); });
   };
   const onEnd = (e) => {
     const wasH = mode === "h";
     const dx = (e.changedTouches?.[0]?.clientX ?? x0) - (x0 ?? 0);
-    const fast = dx < -40 && Date.now() - t0 < 260;
+    const fast = Math.abs(dx) > 40 && Date.now() - t0 < 260;
     x0 = null; mode = ""; Swipe.horizontal = false;
     if (!wasH) return;
-    free().forEach((c) => { c.style.opacity = ""; });
-    if (dx < -90 || fast) shuffleNext(); else swipeReset(det);
+    if (dx < -90 || (fast && dx < 0)) shuffleGo(1);
+    else if (dx > 90 || (fast && dx > 0)) shuffleGo(-1);
+    else swipeReset(det);
   };
-  const onKey = (e) => { if (e.key === "ArrowRight" && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || "")) shuffleNext(); };
+  const onKey = (e) => {
+    if (/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || "")) return;
+    if (e.key === "ArrowRight") shuffleGo(1); else if (e.key === "ArrowLeft") shuffleGo(-1);
+  };
   document.addEventListener("touchstart", onStart, { passive: true });
   document.addEventListener("touchmove", onMove, { passive: false });
   document.addEventListener("touchend", onEnd);
@@ -503,7 +556,7 @@ function setupShuffleSwipe() {
     document.removeEventListener("touchend", onEnd); document.removeEventListener("touchcancel", onEnd);
     document.removeEventListener("keydown", onKey);
   });
-  if (!state.shuffle.hinted) { state.shuffle.hinted = true; toast("Swipe left for another recipe", 3200); }
+  if (!state.shuffle.hinted) { state.shuffle.hinted = true; toast("Swipe left for next, right for back", 3200); }
 }
 const Swipe = { horizontal: false };
 const hasHorizontalScroller = (el) => !!el.closest(".scrub, .sheet, .dev-panel, .timers, .stepper");
@@ -555,6 +608,8 @@ function bindLibrary() {
     $(".chips").scrollLeft = x;
   });
   $('[data-pl="shuffle"]')?.addEventListener("click", startShuffle);
+  $('[data-pl="bonus"]')?.addEventListener("click", startBonus);
+  $('[data-pl-off="bonus"]')?.addEventListener("click", () => toast("No offers yet. They show up when this week's discounts are added."));
   $$("[data-tab]").forEach((b) => b.onclick = () => { state.tab = b.dataset.tab; window.scrollTo(0, 0); renderLibrary(false); });
   $('[data-act="add"]').onclick = openAddSheet;
   $('[data-act="settings"]').onclick = openSettingsSheet;
@@ -596,7 +651,7 @@ async function renderDetail(id, opts = {}) {
   state.current = r;
   window.scrollTo(0, 0);
   app.innerHTML = detailHTML(r);
-  if (opts.slide) { const d = $(".detail"); d.classList.remove("page"); d.classList.add("slide-in"); }
+  if (opts.slide) { const d = $(".detail"); d.classList.remove("page"); d.classList.add(opts.slide > 0 ? "slide-in" : "slide-in-back"); }
   bindDetail(r);
   setupShuffleSwipe();
   // Wide screens: the developer sidebar sits next to the recipe (admins, until closed).
@@ -652,6 +707,14 @@ function heroHTML(r) {
   return `<div class="hero square no-media">${genArt(r.title, true)}<div class="fade"></div></div>`;
 }
 
+// "On offer" under an ingredient: one small pill per supermarket (colour dot AND its name), with price and note.
+function dealHTML(deal) {
+  return `<span class="deal-info">${deal.offers.map((o) => {
+    const price = [o.price, o.was ? `was ${o.was}` : "", o.note].filter(Boolean).join(" · ");
+    return `<span class="deal-pill s-${o.store}" title="${esc(STORE_NAME[o.store])}: ${esc(o.item)}"><i></i>${esc(STORE_SHORT[o.store])}${price ? `<span class="deal-price"> ${esc(price)}</span>` : ""}</span>`;
+  }).join("")}</span>`;
+}
+
 function ingredientsHTML(r, factor) {
   const checked = new Set(store.get("checked." + r.id, []));
   return (r.ingredient_groups || []).map((g, gi) => `
@@ -665,9 +728,10 @@ function ingredientsHTML(r, factor) {
         if (it.unit) qty += " " + esc(unitLabel(it.unit, (it.qty_max ?? it.qty) * factor));
       }
       const orig = it.original && factor === 1 ? ` <span class="orig">${esc(it.original)}</span>` : "";
-      return `<li class="ing ${checked.has(key) ? "done" : ""}" data-ing="${key}">
+      const deal = (r.offers || {})[key];
+      return `<li class="ing ${checked.has(key) ? "done" : ""}${deal ? " deal deal-" + deal.best : ""}" data-ing="${key}">
         <span class="check">${I.check}</span>
-        <span class="txt">${qty ? `<span class="qty">${qty}</span> ` : ""}${esc(it.name)}${it.note ? `<span class="note">, ${esc(it.note)}</span>` : ""}${orig}</span></li>`;
+        <span class="txt">${qty ? `<span class="qty">${qty}</span> ` : ""}${esc(it.name)}${it.note ? `<span class="note">, ${esc(it.note)}</span>` : ""}${orig}${deal ? dealHTML(deal) : ""}</span></li>`;
     }).join("")}</ul>`).join("");
 }
 

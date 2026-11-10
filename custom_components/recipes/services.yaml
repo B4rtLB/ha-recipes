@@ -35,3 +35,30 @@ retry:
       required: false
       selector:
         text:
+set_discounts:
+  fields:
+    store:
+      required: true
+      example: ah
+      selector:
+        select:
+          options:
+            - ah
+            - jumbo
+            - lidl
+            - dirk
+    valid_from:
+      required: true
+      example: "2026-11-09"
+      selector:
+        date:
+    valid_to:
+      required: true
+      example: "2026-11-15"
+      selector:
+        date:
+    items:
+      required: true
+      example: '[{"name": "Chicken breast", "terms": ["kipfilet", "chicken breast"], "price": "€4.99", "was": "€6.49", "note": "2nd half price"}]'
+      selector:
+        object:

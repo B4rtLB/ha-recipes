@@ -7,6 +7,7 @@ VERSION = "0.1.0"
 
 STORAGE_KEY = "recipes.recipes"
 STORAGE_VERSION = 1
+DISCOUNTS_STORAGE_KEY = "recipes.discounts"
 
 CONF_AI_TASK_ENTITY = "ai_task_entity"
 CONF_STT_ENTITY = "stt_entity"

@@ -1,0 +1,389 @@
+{
+ "kind": "discount-active",
+ "cases": [
+  {
+   "name": "first day",
+   "input": {
+    "stores": {
+     "ah": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Kipfilet",
+        "terms": [
+         "kipfilet",
+         "chicken breast",
+         "chicken fillet"
+        ],
+        "price": "€4.99",
+        "was": "€6.49"
+       },
+       {
+        "name": "Tomaten",
+        "terms": [
+         "tomaat",
+         "tomaten",
+         "tomato"
+        ],
+        "price": "€1.29"
+       },
+       {
+        "name": "Roomkaas",
+        "terms": [
+         "cream cheese",
+         "roomkaas"
+        ]
+       }
+      ]
+     },
+     "jumbo": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Chicken breast fillet",
+        "terms": [
+         "chicken breast"
+        ],
+        "price": "3,99"
+       },
+       {
+        "name": "Eieren",
+        "terms": [
+         "ei",
+         "eieren",
+         "egg"
+        ],
+        "price": "€2.10"
+       }
+      ]
+     },
+     "lidl": {
+      "valid_from": "2026-11-02",
+      "valid_to": "2026-11-08",
+      "items": [
+       {
+        "name": "Rijst",
+        "terms": [
+         "rice",
+         "rijst",
+         "basmati rice"
+        ],
+        "price": "€1.50"
+       }
+      ]
+     },
+     "dirk": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Kip",
+        "terms": [
+         "chicken"
+        ],
+        "note": "too broad on purpose"
+       }
+      ]
+     }
+    },
+    "today": "2026-11-09"
+   },
+   "expected": [
+    "ah",
+    "dirk",
+    "jumbo"
+   ]
+  },
+  {
+   "name": "last day of lidl",
+   "input": {
+    "stores": {
+     "ah": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Kipfilet",
+        "terms": [
+         "kipfilet",
+         "chicken breast",
+         "chicken fillet"
+        ],
+        "price": "€4.99",
+        "was": "€6.49"
+       },
+       {
+        "name": "Tomaten",
+        "terms": [
+         "tomaat",
+         "tomaten",
+         "tomato"
+        ],
+        "price": "€1.29"
+       },
+       {
+        "name": "Roomkaas",
+        "terms": [
+         "cream cheese",
+         "roomkaas"
+        ]
+       }
+      ]
+     },
+     "jumbo": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Chicken breast fillet",
+        "terms": [
+         "chicken breast"
+        ],
+        "price": "3,99"
+       },
+       {
+        "name": "Eieren",
+        "terms": [
+         "ei",
+         "eieren",
+         "egg"
+        ],
+        "price": "€2.10"
+       }
+      ]
+     },
+     "lidl": {
+      "valid_from": "2026-11-02",
+      "valid_to": "2026-11-08",
+      "items": [
+       {
+        "name": "Rijst",
+        "terms": [
+         "rice",
+         "rijst",
+         "basmati rice"
+        ],
+        "price": "€1.50"
+       }
+      ]
+     },
+     "dirk": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Kip",
+        "terms": [
+         "chicken"
+        ],
+        "note": "too broad on purpose"
+       }
+      ]
+     }
+    },
+    "today": "2026-11-08"
+   },
+   "expected": [
+    "lidl"
+   ]
+  },
+  {
+   "name": "all expired",
+   "input": {
+    "stores": {
+     "ah": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Kipfilet",
+        "terms": [
+         "kipfilet",
+         "chicken breast",
+         "chicken fillet"
+        ],
+        "price": "€4.99",
+        "was": "€6.49"
+       },
+       {
+        "name": "Tomaten",
+        "terms": [
+         "tomaat",
+         "tomaten",
+         "tomato"
+        ],
+        "price": "€1.29"
+       },
+       {
+        "name": "Roomkaas",
+        "terms": [
+         "cream cheese",
+         "roomkaas"
+        ]
+       }
+      ]
+     },
+     "jumbo": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Chicken breast fillet",
+        "terms": [
+         "chicken breast"
+        ],
+        "price": "3,99"
+       },
+       {
+        "name": "Eieren",
+        "terms": [
+         "ei",
+         "eieren",
+         "egg"
+        ],
+        "price": "€2.10"
+       }
+      ]
+     },
+     "lidl": {
+      "valid_from": "2026-11-02",
+      "valid_to": "2026-11-08",
+      "items": [
+       {
+        "name": "Rijst",
+        "terms": [
+         "rice",
+         "rijst",
+         "basmati rice"
+        ],
+        "price": "€1.50"
+       }
+      ]
+     },
+     "dirk": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Kip",
+        "terms": [
+         "chicken"
+        ],
+        "note": "too broad on purpose"
+       }
+      ]
+     }
+    },
+    "today": "2026-12-01"
+   },
+   "expected": []
+  },
+  {
+   "name": "not yet valid",
+   "input": {
+    "stores": {
+     "ah": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Kipfilet",
+        "terms": [
+         "kipfilet",
+         "chicken breast",
+         "chicken fillet"
+        ],
+        "price": "€4.99",
+        "was": "€6.49"
+       },
+       {
+        "name": "Tomaten",
+        "terms": [
+         "tomaat",
+         "tomaten",
+         "tomato"
+        ],
+        "price": "€1.29"
+       },
+       {
+        "name": "Roomkaas",
+        "terms": [
+         "cream cheese",
+         "roomkaas"
+        ]
+       }
+      ]
+     },
+     "jumbo": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Chicken breast fillet",
+        "terms": [
+         "chicken breast"
+        ],
+        "price": "3,99"
+       },
+       {
+        "name": "Eieren",
+        "terms": [
+         "ei",
+         "eieren",
+         "egg"
+        ],
+        "price": "€2.10"
+       }
+      ]
+     },
+     "lidl": {
+      "valid_from": "2026-11-02",
+      "valid_to": "2026-11-08",
+      "items": [
+       {
+        "name": "Rijst",
+        "terms": [
+         "rice",
+         "rijst",
+         "basmati rice"
+        ],
+        "price": "€1.50"
+       }
+      ]
+     },
+     "dirk": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Kip",
+        "terms": [
+         "chicken"
+        ],
+        "note": "too broad on purpose"
+       }
+      ]
+     }
+    },
+    "today": "2026-10-01"
+   },
+   "expected": []
+  },
+  {
+   "name": "empty list is not active",
+   "input": {
+    "stores": {
+     "ah": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": []
+     }
+    },
+    "today": "2026-11-10"
+   },
+   "expected": []
+  }
+ ]
+}

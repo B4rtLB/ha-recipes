@@ -82,6 +82,28 @@
           "description": "Recipe ID (optional)."
         }
       }
+    },
+    "set_discounts": {
+      "name": "Set discounts",
+      "description": "Replace one supermarket's discount list for a week; the other supermarkets are not touched. Items match recipe ingredients by their terms (Dutch and English keywords, all words of one term must appear in the ingredient name).",
+      "fields": {
+        "store": {
+          "name": "Supermarket",
+          "description": "ah, jumbo, lidl or dirk."
+        },
+        "valid_from": {
+          "name": "Valid from",
+          "description": "First day of the offers."
+        },
+        "valid_to": {
+          "name": "Valid to",
+          "description": "Last day of the offers."
+        },
+        "items": {
+          "name": "Items",
+          "description": "List of {name, terms, price, was, note}. Only name is required (terms default to the name)."
+        }
+      }
     }
   }
 }
