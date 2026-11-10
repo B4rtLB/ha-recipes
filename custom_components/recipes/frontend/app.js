@@ -1046,6 +1046,7 @@ async function openSettingsSheet() {
     ${info.is_admin && info.options ? `<div class="sub-h">Reading recipes</div>
       ${select("ai_task_entity", "AI Task", "Automatic")}
       ${select("language", "Recipe language")}
+      ${select("extraction_mode", "Extraction")}
       <label class="opt row"><span>Listen to videos<small>Speech-to-text when the caption is short</small></span>
         <button class="switch" role="switch" data-opt-toggle="transcribe" aria-checked="${!!opts.transcribe}" aria-label="Listen to videos"></button></label>
       ${select("stt_entity", "Speech-to-text", "Automatic")}
@@ -1139,7 +1140,7 @@ const Dev = {
     const errors = [...(d.errors || []), ...(d.error && !(d.errors || []).some((e) => e.includes(d.error)) ? [d.error] : [])];
     el.innerHTML = head + `
       ${kv("Status", r.status)}${kv("Platform", d.platform || (r.source || {}).platform)}${kv("Chosen link", d.url || (r.source || {}).url)}
-      ${kv("AI Task", ai.entity)}${kv("Processed", d.finished ? new Date(d.finished).toLocaleString() : "")}${kv("Media folder", res.folder)}
+      ${kv("AI Task", ai.entity)}${kv("Extraction", d.mode ? (d.mode === "lean" ? "Lean" : "Classic") + (ai.shortcut ? " · JSON-LD shortcut" : "") : "")}${kv("Processed", d.finished ? new Date(d.finished).toLocaleString() : "")}${kv("Media folder", res.folder)}
       ${!res.available ? `<p class="hint" style="margin-top:18px">No debug data for this recipe yet. It is recorded the next time the recipe is read.</p>
         <div class="actions"><button class="btn plain press" data-dev="retry">${I.retry}Read recipe again</button></div>` : `
       ${timings ? `<div class="sub-h">Timings</div>${timings}` : ""}
@@ -1150,9 +1151,13 @@ const Dev = {
       ${this.block("Caption", d.caption)}${this.block("Transcript", d.transcript)}${this.block("Web page", d.web_text)}
       ${(d.attachments || []).length ? kv("Attachments", d.attachments.join(", ")) : ""}
       <div class="sub-h">AI</div>
+      ${this.block("Prepared material (lean)", (ai.prepared || d.prepared || []).join("\n\n"))}
       ${this.block("Prompt sent", ai.prompt)}${this.block("Raw output", ai.output)}${this.block("First output (not valid JSON)", ai.unparseable_output)}
       <div class="sub-h">Experiment</div>
       <p class="hint" style="text-align:left">Runs only the AI step again on the material above. Nothing is saved until you confirm.</p>
+      <label class="opt"><span>Extraction</span><select class="field" id="dev-mode">
+        <option value="">As set (${res.mode === "lean" ? "Lean" : "Classic"})</option>
+        <option value="classic">Classic</option><option value="lean">Lean</option></select></label>
       <textarea class="field" id="dev-instr" rows="2" placeholder="Extra instruction (optional)"></textarea>
       <details class="dev-edit"><summary>Edit the full prompt</summary><textarea class="field mono" id="dev-prompt" rows="14" spellcheck="false">${esc(ai.prompt || "")}</textarea></details>
       <div class="actions"><button class="btn primary press" id="dev-run">Re-run AI only</button></div>
@@ -1163,12 +1168,15 @@ const Dev = {
     if (run) run.onclick = async () => {
       const instruction = $("#dev-instr", el).value.trim();
       let prompt = $("#dev-prompt", el).value;
-      const edited = prompt.trim() !== (ai.prompt || "").trim();
+      const mode = $("#dev-mode", el).value;
+      const runMode = d.mode || "classic";
+      // The edited prompt belongs to the mode of the last run; another mode builds its own.
+      const edited = (!mode || mode === runMode) && prompt.trim() !== (ai.prompt || "").trim();
       if (edited && instruction) prompt += "\n\nEXTRA INSTRUCTION:\n" + instruction;
       run.disabled = true; run.textContent = "Asking the AI…";
       const out = $("#dev-result", el);
       try {
-        const result = await api("/" + r.id + "/debug/rerun", { method: "POST", body: edited ? { prompt } : { instruction } });
+        const result = await api("/" + r.id + "/debug/rerun", { method: "POST", body: { ...(edited ? { prompt } : { instruction }), ...(mode ? { mode } : {}) } });
         if (out.isConnected) this.showResult(out, result);
       } catch (err) { if (out.isConnected) out.innerHTML = `<div class="dev-note err">${esc(err.message)}</div>`; }
       run.disabled = false; run.textContent = "Re-run AI only";
@@ -1199,7 +1207,7 @@ const Dev = {
     }
     const cur = this.rows(r), next = this.rows(result.fields);
     const changed = cur.filter((row, i) => row[1] !== next[i][1]).length;
-    out.innerHTML = `<div class="sub-h">Result · ${secs} s · ${changed ? `${changed} part${changed === 1 ? "" : "s"} changed` : "no changes"}</div>
+    out.innerHTML = `<div class="sub-h">Result · ${result.mode === "lean" ? "Lean" : "Classic"}${result.shortcut ? " (JSON-LD)" : ""} · ${secs} s · ${changed ? `${changed} part${changed === 1 ? "" : "s"} changed` : "no changes"}</div>
       <div class="cmp cols"><div>Current</div><div>New</div></div>
       ${cur.map(([label, html], i) => (html || next[i][1]) ? `<div class="cmp-k ${html !== next[i][1] ? "diff" : ""}">${label}${html !== next[i][1] ? " · changed" : ""}</div>
         <div class="cmp"><div>${html || "–"}</div><div>${next[i][1] || "–"}</div></div>` : "").join("")}

@@ -12,6 +12,7 @@ from typing import Any
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
+from . import parser
 from .const import LANGUAGES, TAG_GROUPS
 
 _LOGGER = logging.getLogger(__name__)
@@ -100,6 +101,140 @@ def build_prompt(source: str, language: str, extra: str | None = None) -> str:
     return prompt
 
 
+LEAN_PROMPT = """Extract ONE recipe from the source below. Answer with a single JSON object and nothing else.
+
+RULES
+- Use only what the source says. Never invent ingredients or steps.
+- Several parts (caption, transcript, note): combine them. Amounts in the caption win.
+- "title" and "description" and every step: write in {language}. The title is the dish name only, no emoji.
+- "ingredient_groups": copy every ingredient line exactly as written, with its amount and unit \
+(like "1 cup flour" or "200 g chicken thigh, diced"). Do NOT convert units and do NOT calculate. \
+You may translate the words to {language}. Use one group with "name": null unless the source has groups.
+- "steps": one string per instruction, in order, with all details. Keep temperatures and times as written.
+- "tags": at most one tag per group, exactly as written, skip a group when unsure:
+{tags}
+  Quick = ready in 30 minutes or less. Protein: tag the main meat or fish (bacon and ham are Pork).
+- Times and servings from the source, otherwise null.
+
+JSON SHAPE
+{{"recipe_found": true, "title": "...", "description": "one short sentence or null", "servings": 4, \
+"servings_text": null, "prep_min": null, "cook_min": null, "total_min": null, \
+"ingredient_groups": [{{"name": null, "items": ["200 g chicken thigh, diced", "1 tsp salt"]}}], \
+"steps": ["Fry the chicken for 5 minutes.", "Add the sauce."], "tags": ["Main", "Chicken"], "source_notes": null}}
+
+No recipe in the source: {{"recipe_found": false, "title": "what the source is"}}
+
+SOURCE MATERIAL
+{source}"""
+
+TAGS_PROMPT = """A recipe is already parsed. Only choose tags and, when missing, write a description. \
+Answer with a single JSON object and nothing else.
+
+TITLE: {title}
+INGREDIENTS: {ingredients}
+CATEGORY / CUISINE / KEYWORDS: {hints}
+TOTAL TIME: {minutes}
+DESCRIPTION: {description}
+
+Tags: at most one per group, exactly as written, skip a group when unsure:
+{tags}
+  Quick = ready in 30 minutes or less. Protein: tag the main meat or fish (bacon and ham are Pork).
+Description: one short sentence in {language}, or keep the one above when it is fine.
+
+{{"tags": ["Main", "Chicken"], "description": "..."}}"""
+
+
+def _tag_lines() -> str:
+    return "\n".join(f"  {group}: {' '.join(values)}" for group, values in TAG_GROUPS.items())
+
+
+def _with_extra(prompt: str, extra: str | None) -> str:
+    if extra and extra.strip():
+        prompt += (
+            "\n\nEXTRA INSTRUCTION (it overrides the rules above where they conflict, "
+            "but never invent ingredients or steps):\n" + extra.strip()
+        )
+    return prompt
+
+
+def build_lean_prompt(source: str, language: str, extra: str | None = None) -> str:
+    """The short prompt for small models: raw ingredient strings and step text only."""
+    return _with_extra(
+        LEAN_PROMPT.format(language=LANGUAGES.get(language, language), tags=_tag_lines(), source=source), extra
+    )
+
+
+def build_tags_prompt(data: dict[str, Any], language: str, extra: str | None = None) -> str:
+    """Tiny prompt for the JSON-LD shortcut: only tags and a description are left to the AI."""
+    names = [
+        parser.parse_ingredient(item)["name"] if isinstance(item, str) else str(item.get("name", ""))
+        for group in data.get("ingredient_groups") or []
+        for item in group.get("items") or []
+    ]
+    return _with_extra(
+        TAGS_PROMPT.format(
+            title=data.get("title") or "",
+            ingredients=", ".join(n for n in names if n)[:1500],
+            hints=data.get("_hints") or "-",
+            minutes=data.get("total_min") or data.get("cook_min") or "unknown",
+            description=data.get("description") or "(none)",
+            language=LANGUAGES.get(language, language),
+            tags=_tag_lines(),
+        ),
+        extra,
+    )
+
+
+def lean_to_full(data: dict[str, Any]) -> dict[str, Any]:
+    """Turn the lean AI output (raw strings) into the full shape that ``normalize`` reads.
+
+    Ingredient strings go through the parser, step text gets °F/inches converted and
+    timers from the durations in it. Dict items (a model that ignored the lean shape) pass.
+    """
+    out = dict(data)
+    groups: list[dict[str, Any]] = []
+    raw_groups = data.get("ingredient_groups")
+    if not raw_groups and data.get("ingredients"):
+        raw_groups = [{"name": None, "items": data["ingredients"]}]
+    for group in raw_groups or []:
+        if isinstance(group, str):
+            group = {"name": None, "items": [group]}
+        if not isinstance(group, dict):
+            continue
+        current: dict[str, Any] = {"name": group.get("name") or None, "items": []}
+        groups.append(current)
+        for item in group.get("items") or []:
+            if isinstance(item, str):
+                text = item.strip()
+                # A small model sometimes puts a heading in the list: "For the sauce:"
+                if text.endswith(":") and not text[:1].isdigit():
+                    current = {"name": text.rstrip(": ").strip() or None, "items": []}
+                    groups.append(current)
+                    continue
+                if text:
+                    current["items"].append(parser.parse_ingredient(text))
+            elif isinstance(item, dict):
+                if item.get("qty") is None and item.get("unit") is None and re.match(r"\s*[\d½¼¾⅓⅔]", str(item.get("name") or "")):
+                    parsed = parser.parse_ingredient(str(item["name"]))
+                    parsed["note"] = parsed["note"] or item.get("note")
+                    current["items"].append(parsed)
+                else:
+                    current["items"].append(item)
+    out["ingredient_groups"] = [g for g in groups if g["items"]]
+
+    steps = []
+    for step in data.get("steps") or []:
+        if isinstance(step, str):
+            step = {"text": step}
+        if not isinstance(step, dict) or not step.get("text"):
+            continue
+        text = parser.convert_text(str(step["text"]).strip())
+        timers = [t for t in step.get("timers") or [] if isinstance(t, dict) and t.get("seconds")]
+        steps.append({"text": text, "timers": timers or parser.find_timers(text)})
+    out["steps"] = steps
+    return out
+
+
 def default_ai_task_entity(hass: HomeAssistant) -> str | None:
     """Return the preferred AI task entity, or the first one available."""
     try:
@@ -171,28 +306,9 @@ def parse_json(text: str) -> dict[str, Any]:
     return data
 
 
-_DURATION_RE = re.compile(
-    r"(\d+(?:[.,]\d+)?)(?:\s*(?:-|–|to|tot)\s*(\d+(?:[.,]\d+)?))?\s*"
-    r"(hours?|hrs?|uur|h|minutes?|mins?|minuten|min|m|seconds?|secs?|seconden|sec|s)\b",
-    re.IGNORECASE,
-)
-
-
 def find_durations(text: str) -> list[int]:
     """Find durations (seconds) mentioned in a step; fallback when the AI gives none."""
-    found = []
-    for match in _DURATION_RE.finditer(text):
-        value = float(match.group(1).replace(",", "."))
-        unit = match.group(3).lower()
-        if unit.startswith(("h", "u")):
-            seconds = value * 3600
-        elif unit.startswith("s"):
-            seconds = value
-        else:
-            seconds = value * 60
-        if 10 <= seconds <= 48 * 3600:
-            found.append(int(seconds))
-    return found
+    return parser.find_durations(text)
 
 
 def _num(value: Any) -> float | None:
@@ -269,7 +385,7 @@ def normalize(data: dict[str, Any]) -> dict[str, Any]:
             if isinstance(timer, dict) and (sec := _num(timer.get("seconds"))) and sec > 0:
                 timers.append({"seconds": int(sec), "label": timer.get("label") or None})
         if not timers:
-            timers = [{"seconds": s, "label": None} for s in find_durations(text)[:2]]
+            timers = parser.find_timers(text, 2)
         steps.append({"text": text, "timers": timers})
 
     tags = []

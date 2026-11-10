@@ -198,15 +198,93 @@ def jsonld_image(recipe: dict[str, Any]) -> str | None:
     return candidates[-1] if candidates else None  # last is usually largest
 
 
+_JSONLD_KEEP = (
+    "name", "description", "recipeYield", "prepTime", "cookTime", "totalTime",
+    "recipeIngredient", "recipeInstructions", "recipeCategory", "recipeCuisine",
+    "keywords", "author",
+)
+
+
+def slim_jsonld(recipe: dict[str, Any]) -> dict[str, Any]:
+    """The keys of a JSON-LD recipe that matter for reading it."""
+    return {k: v for k, v in recipe.items() if k in _JSONLD_KEEP}
+
+
 def compact_jsonld(recipe: dict[str, Any]) -> str:
     """Strip noisy keys from a JSON-LD recipe for the AI prompt."""
-    keep = {
-        "name", "description", "recipeYield", "prepTime", "cookTime", "totalTime",
-        "recipeIngredient", "recipeInstructions", "recipeCategory", "recipeCuisine",
-        "keywords", "author",
+    return json.dumps(slim_jsonld(recipe), ensure_ascii=False)[:30000]
+
+
+def _clean(value: Any) -> str:
+    return re.sub(r"\s+", " ", html_lib.unescape(re.sub(r"<[^>]+>", " ", str(value or "")))).strip()
+
+
+def iso_minutes(value: Any) -> int | None:
+    """ISO 8601 duration ("PT1H15M") in minutes."""
+    match = re.fullmatch(
+        r"P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?", str(value or "").strip(), re.IGNORECASE
+    )
+    if not match:
+        return None
+    days, hours, minutes, seconds = (int(g or 0) for g in match.groups())
+    total = days * 1440 + hours * 60 + minutes + (1 if seconds >= 30 else 0)
+    return total or None
+
+
+def _instruction_steps(node: Any) -> list[str]:
+    """Flatten recipeInstructions (text, HowToStep, HowToSection) into step strings."""
+    if isinstance(node, str):
+        parts = [p for p in re.split(r"\n+|\r+", node) if p.strip()]
+        return [_clean(p) for p in parts if _clean(p)]
+    if isinstance(node, list):
+        return [step for item in node for step in _instruction_steps(item)]
+    if isinstance(node, dict):
+        if node.get("itemListElement"):
+            return _instruction_steps(node["itemListElement"])
+        return _instruction_steps(node.get("text") or node.get("name") or "")
+    return []
+
+
+def jsonld_to_data(recipe: dict[str, Any]) -> dict[str, Any] | None:
+    """Build the lean AI output from a schema.org Recipe, without any AI.
+
+    None when the JSON-LD has no usable ingredients and steps. Title, times, servings,
+    ingredient lines and steps come from the page; tags and (if missing) the description
+    are left to a very small AI call.
+    """
+    ingredients = recipe.get("recipeIngredient")
+    if isinstance(ingredients, str):
+        ingredients = [ingredients]
+    lines = [_clean(i) for i in ingredients or [] if _clean(i)]
+    steps = _instruction_steps(recipe.get("recipeInstructions"))
+    if len(lines) < 2 or not steps:
+        return None
+    servings_text = recipe.get("recipeYield")
+    if isinstance(servings_text, list):
+        servings_text = next((s for s in servings_text if s), None)
+    servings_text = _clean(servings_text) or None
+    servings = re.search(r"\d+", servings_text or "")
+    hints = []
+    for key in ("recipeCategory", "recipeCuisine", "keywords"):
+        value = recipe.get(key)
+        hints += [_clean(v) for v in (value if isinstance(value, list) else [value]) if _clean(v)]
+    prep, cook, total = (iso_minutes(recipe.get(k)) for k in ("prepTime", "cookTime", "totalTime"))
+    return {
+        "recipe_found": True,
+        "title": _clean(recipe.get("name")) or "Untitled recipe",
+        "description": _clean(recipe.get("description")) or None,
+        "servings": int(servings.group(0)) if servings else None,
+        "servings_text": servings_text,
+        "prep_min": prep,
+        "cook_min": cook,
+        "total_min": total,
+        "estimated": False,
+        "ingredient_groups": [{"name": None, "items": lines}],
+        "steps": steps,
+        "tags": [],
+        "source_notes": None,
+        "_hints": ", ".join(hints)[:300],
     }
-    slim = {k: v for k, v in recipe.items() if k in keep}
-    return json.dumps(slim, ensure_ascii=False)[:30000]
 
 
 # ---------------------------------------------------------------- meta tags
@@ -259,7 +337,7 @@ async def fetch_web(session: aiohttp.ClientSession, url: str) -> SourceContent:
         content.image_url = jsonld_image(recipe) or content.image_url
         content.title = recipe.get("name") or content.title
     else:
-        content.text = "WEB PAGE TEXT:\n" + html_to_text(html)
+        content.text = "WEB PAGE TEXT:\n" + (f"Title: {content.title}\n" if content.title else "") + html_to_text(html)
     if content.image_url:
         content.image_url = urljoin(final_url, content.image_url)
     return content

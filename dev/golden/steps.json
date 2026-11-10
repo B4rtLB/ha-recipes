@@ -1,0 +1,150 @@
+{
+ "kind": "step",
+ "cases": [
+  {
+   "input": "Preheat the oven to 400°F.",
+   "expected": {
+    "text": "Preheat the oven to 200 °C (400 °F).",
+    "timers": []
+   }
+  },
+  {
+   "input": "Bake at 350 degrees F for 25 minutes until golden.",
+   "expected": {
+    "text": "Bake at 180 °C (350 °F) for 25 minutes until golden.",
+    "timers": [
+     [
+      1500,
+      "Bake"
+     ]
+    ]
+   }
+  },
+  {
+   "input": "Bake at 180°C/350°F for 1 hour 30 minutes.",
+   "expected": {
+    "text": "Bake at 180°C/350°F for 1 hour 30 minutes.",
+    "timers": [
+     [
+      5400,
+      "Bake"
+     ]
+    ]
+   }
+  },
+  {
+   "input": "Simmer for 10-15 minutes, then rest overnight in the fridge.",
+   "expected": {
+    "text": "Simmer for 10-15 minutes, then rest overnight in the fridge.",
+    "timers": [
+     [
+      600,
+      "Simmer"
+     ],
+     [
+      28800,
+      "Rest"
+     ]
+    ]
+   }
+  },
+  {
+   "input": "Grease a 9-inch pan and bake 45 min at 375°F (190°C).",
+   "expected": {
+    "text": "Grease a 23 cm (9 in) pan and bake 45 min at 375°F (190°C).",
+    "timers": [
+     [
+      2700,
+      "Bake"
+     ]
+    ]
+   }
+  },
+  {
+   "input": "Fry the onion 5 minutes, add the garlic and cook 30 seconds.",
+   "expected": {
+    "text": "Fry the onion 5 minutes, add the garlic and cook 30 seconds.",
+    "timers": [
+     [
+      300,
+      "Fry"
+     ],
+     [
+      30,
+      "Cook"
+     ]
+    ]
+   }
+  },
+  {
+   "input": "Laat 20 minuten rusten en bak 1 uur op 200 graden.",
+   "expected": {
+    "text": "Laat 20 minuten rusten en bak 1 uur op 200 graden.",
+    "timers": [
+     [
+      1200,
+      "Rest"
+     ],
+     [
+      3600,
+      "Bake"
+     ]
+    ]
+   }
+  },
+  {
+   "input": "Let it sit for half an hour.",
+   "expected": {
+    "text": "Let it sit for half an hour.",
+    "timers": [
+     [
+      1800,
+      "Rest"
+     ]
+    ]
+   }
+  },
+  {
+   "input": "Cook the rice for 1h30, stirring every few minutes.",
+   "expected": {
+    "text": "Cook the rice for 1h30, stirring every few minutes.",
+    "timers": [
+     [
+      5400,
+      "Cook"
+     ]
+    ]
+   }
+  },
+  {
+   "input": "Serve with lime wedges.",
+   "expected": {
+    "text": "Serve with lime wedges.",
+    "timers": []
+   }
+  },
+  {
+   "input": "Marinate the chicken for 2 hours or up to 24 hours.",
+   "expected": {
+    "text": "Marinate the chicken for 2 hours or up to 24 hours.",
+    "timers": [
+     [
+      7200,
+      "Marinate"
+     ],
+     [
+      86400,
+      "Marinate"
+     ]
+    ]
+   }
+  },
+  {
+   "input": "Roll out to a 12 x 8 inch rectangle.",
+   "expected": {
+    "text": "Roll out to a 30 x 20 cm (12 x 8 in) rectangle.",
+    "timers": []
+   }
+  }
+ ]
+}

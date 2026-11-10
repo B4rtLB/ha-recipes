@@ -11,10 +11,12 @@ Open work is in `TODO.md`.
 | Path | What |
 |---|---|
 | `custom_components/recipes/__init__.py` | Setup, services (`recipes.add/status/retry/delete`), webhook registration, asset version |
-| `custom_components/recipes/pipeline.py` | `RecipeProcessor`: sequential queue. `_collect` gathers the material (social video / web page / upload / text), `_extract` is the AI step, then save. Writes `debug.json`; `rerun_ai` / `apply_experiment` for the developer view. `new_recipe_from_payload` picks the URL and dedupes |
-| `custom_components/recipes/sources.py` | Platform detection, link picking (`best_url`, skips script/CDN links), web fetch + JSON-LD, social og-meta fallback |
+| `custom_components/recipes/pipeline.py` | `RecipeProcessor`: sequential queue. `_collect` gathers the material (social video / web page / upload / text), `_extract` is the AI call, `_read_recipe` picks classic or lean around it, then save. Writes `debug.json`; `rerun_ai` / `apply_experiment` for the developer view. `new_recipe_from_payload` picks the URL and dedupes |
+| `custom_components/recipes/sources.py` | Platform detection, link picking (`best_url`, skips script/CDN links), web fetch + JSON-LD (`slim_jsonld`, `jsonld_to_data` for the shortcut), social og-meta fallback |
 | `custom_components/recipes/video.py` | yt-dlp download, ffmpeg (iOS-friendly mp4, `hvc1` tag, faststart), poster, audio for speech-to-text |
-| `custom_components/recipes/ai.py` | The extraction prompt, AI Task call (with attachments), JSON parsing, `normalize` (tags, timers, "Quick" ≤ 30 min, Protein tag fallback from title/ingredients) |
+| `custom_components/recipes/ai.py` | The extraction prompts (`PROMPT` classic, `LEAN_PROMPT` lean, `TAGS_PROMPT` for the JSON-LD shortcut), AI Task call (with attachments), JSON parsing, `lean_to_full` (raw strings → full shape via the parser), `normalize` (tags, timers, "Quick" ≤ 30 min, Protein tag fallback from title/ingredients) |
+| `custom_components/recipes/parser.py` | Lean mode's deterministic part, pure Python: `parse_ingredient` (fractions, ranges, English + Dutch words, cups/oz/lb/fl oz/dl → g, kg, ml, l, density table for flour/sugar/rice, original kept), `convert_text` (°F → °C, inches → cm in steps), `find_timers` / `find_durations` |
+| `custom_components/recipes/preprocess.py` | Lean mode: `prepare()` cuts captions, transcripts and web text to the recipe (strips emoji, hashtags, links, "follow me" lines, cuts to the ingredient and step sections) |
 | `custom_components/recipes/views.py` | HTTP API (`/api/recipes...`), app shell, signed media with Range support, webhook payload parsing, settings (integration options + cookies, admin), developer endpoints (`/api/recipes/<id>/debug`, `/debug/rerun`, `/debug/apply`, admin) |
 | `custom_components/recipes/store.py` | All recipes in one HA Store (`.storage/recipes.recipes`), media in `/media/recipes/<slug-of-title>-<id>/` (`recipe["folder"]`; renamed when the title changes, never while the pipeline holds `media_lock`) |
 | `custom_components/recipes/config_flow.py` | Setup + options (AI Task, STT, language, transcribe, to-do list, notify) |
@@ -22,7 +24,7 @@ Open work is in `TODO.md`.
 | `custom_components/recipes/frontend/` | The PWA: `index.html`, `app.js` (vanilla JS, no build step), `app.css`, `sw.js`, manifest. Icons are drawn at runtime by `icons.py` |
 | `shortcuts/build_shortcuts.py` | Builds the iOS shortcuts "Save Recipe" and "Recipe Timer" (sign on a Mac: `shortcuts sign --mode anyone`) |
 | `tools/` | One-off Apple Notes export/import |
-| `dev/` | Local test Home Assistant with a fake AI; e2e and UI tests (see below) |
+| `dev/` | Local test Home Assistant with a fake AI; e2e, UI tests and golden parser tests (`dev/golden/`, see below) |
 
 ## How a recipe is made
 
@@ -32,13 +34,14 @@ Open work is in `TODO.md`.
    - **Web:** JSON-LD or page text.
    - **Upload / text:** used as is.
    - Then the AI Task writes the recipe, `ai.normalize` cleans it up, and a notification goes to the phone (skipped for imports).
+   - **Extraction mode** (option `extraction_mode`, Settings → Extraction; default `classic`, so OpenAI behaves as before). `lean` is for small local models (Ollama): `preprocess.prepare` cuts the material, the short `LEAN_PROMPT` makes the AI return title, description, tags, raw ingredient strings and step text only, and `parser.py` does the amounts, units, metric conversion and timers (`ai.lean_to_full`). A web page with complete JSON-LD (≥ 2 ingredients, ≥ 1 step, in the recipe language) skips the AI for ingredients and steps; only a tiny `TAGS_PROMPT` call picks tags (and a description if the page has none). If that call fails the recipe is still saved. Photos and PDFs always use the full lean prompt (the vision model reads them).
 3. The app loads `/api/recipes`; media URLs are signed (`async_sign_path`), so `<video>`/`<img>` work without headers. They are `/api/recipes/media/<id>/<file>`, whatever the folder is called.
-4. Every run leaves `debug.json` in the media folder: shared input, chosen URL, caption, transcript, web text, the material and prompt sent to the AI, the raw output, timings and errors. It is not in the Store and not served as media.
+4. Every run leaves `debug.json` in the media folder: shared input, chosen URL, caption, transcript, web text, JSON-LD, mode, the material (raw) and the prepared material (lean), the prompt sent to the AI, the raw output, timings and errors. It is not in the Store and not served as media.
 
 ## Settings and developer view
 
-- The Settings sheet (•••) shows the integration options to admins (AI Task, language, transcribe, speech-to-text, to-do list, notify). They are the same keys as the Home Assistant options flow (`const.py`) and are saved with `async_update_entry`; the processor uses them at once.
-- Developer view (admins): ••• on a recipe → Developer. Full screen on the phone, a sidebar next to the recipe from 1000px wide (on by default there, remembered per device). "Re-run AI only" uses the cached material with an extra instruction or an edited prompt, shows current next to new, and saves only on confirm.
+- The Settings sheet (•••) shows the integration options to admins (AI Task, language, extraction mode, transcribe, speech-to-text, to-do list, notify). They are the same keys as the Home Assistant options flow (`const.py`) and are saved with `async_update_entry`; the processor uses them at once.
+- Developer view (admins): ••• on a recipe → Developer. Full screen on the phone, a sidebar next to the recipe from 1000px wide (on by default there, remembered per device). "Re-run AI only" uses the cached material with an extra instruction or an edited prompt, shows current next to new, and saves only on confirm. The Extraction picker there runs the same material as Classic or Lean (default: the setting), which is how to compare the two modes on a real recipe.
 
 ## Design rules (Bart's preferences)
 
@@ -65,11 +68,14 @@ The video tests fetch the fixtures as "TikTok" via `tiktok.com.localhost`, which
 Every change:
 
 ```bash
+dev/.venv/bin/python dev/test_parser.py   # golden tests for parser, preprocess, JSON-LD shortcut (no HA needed)
 python3 dev/e2e.py        # backend end to end (deletes all recipes in the dev instance)
 node dev/ui_check.js      # emulated iPhone 15 Pro + a wide screen: buttons, sheets, settings, filters, video, developer view; screenshots in dev/shots/
 ```
 
-Restart `dev/run.sh` after Python changes. Frontend changes only need a reload, but the asset version (`?v=`) is computed at startup, so restart to be sure. Look at the screenshots: visual changes are judged by eye. The fake AI (`dev/fake_ai`) always returns the same "Test Dish"; real extraction quality can only be checked on Bart's Home Assistant.
+Restart `dev/run.sh` after Python changes. Frontend changes only need a reload, but the asset version (`?v=`) is computed at startup, so restart to be sure. Look at the screenshots: visual changes are judged by eye. The fake AI (`dev/fake_ai`) always returns the same "Test Dish" (classic: structured JSON; lean prompt: raw strings; tags prompt: tags only); real extraction quality can only be checked on Bart's Home Assistant, and lean mode on a real small model only there too.
+
+Golden fixtures live in `dev/golden/*.json` (inputs plus `expected`). After a deliberate parser change run `test_parser.py --update` and read the diff. `dev/make_golden.py <debug.json or media folder>` turns a real debug.json into a sanitized fixture; the repo is public, so read it for names before committing.
 
 ## Deploy to Bart's Home Assistant
 

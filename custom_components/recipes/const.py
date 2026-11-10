@@ -16,6 +16,18 @@ CONF_INSTAGRAM_COOKIES = "instagram_cookies"
 CONF_TRANSCRIBE = "transcribe"
 CONF_WEBHOOK_ID = "webhook_id"
 CONF_TODO_ENTITY = "todo_entity"
+CONF_EXTRACTION_MODE = "extraction_mode"
+
+# "classic": the AI does everything (best with a large model such as OpenAI).
+# "lean": the AI only returns raw strings; preprocessing, the parser and the JSON-LD
+# shortcut do the rest (made for small local models, e.g. Ollama).
+EXTRACTION_CLASSIC = "classic"
+EXTRACTION_LEAN = "lean"
+EXTRACTION_MODES = {
+    EXTRACTION_CLASSIC: "Classic (the AI does everything)",
+    EXTRACTION_LEAN: "Lean (for small local models)",
+}
+DEFAULT_EXTRACTION_MODE = EXTRACTION_CLASSIC
 
 DEFAULT_LANGUAGE = "en"
 LANGUAGES = {"en": "English", "nl": "Dutch (Nederlands)"}

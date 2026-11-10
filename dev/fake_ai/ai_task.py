@@ -11,11 +11,25 @@ class FakeAI(AITaskEntity):
         src = task.instructions.split("SOURCE MATERIAL", 1)[-1]
         self.hass_.data["fake_ai_last"]["prompt"] = task.instructions
         self.hass_.data["fake_ai_last"]["attachments"] = [str(a.path) for a in (task.attachments or [])]
+        lean = task.instructions.startswith("Extract ONE recipe")  # the lean prompt: raw strings
+        if task.instructions.startswith("A recipe is already parsed"):  # JSON-LD shortcut: tags only
+            data = {"tags": ["Main", "Chicken", "#Asian", "Bogus"], "description": "A tagged test dish."}
+            return GenDataTaskResult(conversation_id=str(uuid.uuid4()), data=json.dumps(data))
         title = "Test Dish"
         m = re.search(r'"name":\s*"([^"]+)"', src) or re.search(r"RECIPE TEXT:\n(.+)", src)
         if m: title = m.group(1).strip()
         if "NO_RECIPE" in src:
             return GenDataTaskResult(conversation_id=str(uuid.uuid4()), data='{"recipe_found": false, "title": "A dance video"}')
+        if lean:
+            data = {"recipe_found": True, "title": title, "description": "A quick test dish.", "servings": 4,
+              "prep_min": 10, "cook_min": 25,
+              "ingredient_groups": [
+                {"name": None, "items": ["1.1 lb chicken thighs, boneless", "2-3 cloves garlic", "½ tsp chili flakes", "salt to taste"]},
+                {"name": "Sauce", "items": ["200 ml coconut milk", "een snuf zout"]}],
+              "steps": ["Fry the chicken for 5 minutes until golden.", "Add the sauce and simmer 10-15 minutes.",
+                        "Bake at 400°F for 1 hour 30 minutes.", "Serve with rice."],
+              "tags": ["Main", "Chicken", "#Asian", "Bogus"], "source_notes": None}
+            return GenDataTaskResult(conversation_id=str(uuid.uuid4()), data=json.dumps(data))
         data = {"recipe_found": True, "title": title, "description": "A quick test dish.", "servings": 4,
           "prep_min": 10, "cook_min": 25, "estimated": False,
           "ingredient_groups": [{"name": None, "items": [

@@ -1,0 +1,260 @@
+{
+ "kind": "jsonld",
+ "cases": [
+  {
+   "name": "simple",
+   "input": {
+    "name": "Weeknight Chicken Curry",
+    "description": "A fast curry.",
+    "recipeYield": [
+     "4",
+     "4 servings"
+    ],
+    "prepTime": "PT10M",
+    "cookTime": "PT25M",
+    "totalTime": "PT35M",
+    "recipeCategory": "Dinner",
+    "recipeCuisine": "Indian",
+    "keywords": "curry, chicken",
+    "recipeIngredient": [
+     "1 lb chicken thighs",
+     "2 cloves garlic, minced",
+     "1 can (13.5 oz) coconut milk",
+     "2 tbsp curry powder",
+     "salt &amp; pepper, to taste"
+    ],
+    "recipeInstructions": [
+     {
+      "@type": "HowToStep",
+      "text": "Brown the chicken for 5 minutes."
+     },
+     {
+      "@type": "HowToStep",
+      "text": "Add the coconut milk and simmer 20 min."
+     }
+    ]
+   },
+   "expected": {
+    "title": "Weeknight Chicken Curry",
+    "servings": 4,
+    "servings_text": "4",
+    "minutes": [
+     10,
+     25,
+     35
+    ],
+    "hints": "Dinner, Indian, curry, chicken",
+    "ingredients": [
+     [
+      450,
+      "g",
+      "chicken thighs",
+      null,
+      "1 lb"
+     ],
+     [
+      2,
+      "clove",
+      "garlic",
+      "minced",
+      null
+     ],
+     [
+      1,
+      "can",
+      "coconut milk",
+      "385 g",
+      null
+     ],
+     [
+      2,
+      "tbsp",
+      "curry powder",
+      null,
+      null
+     ],
+     [
+      null,
+      null,
+      "salt & pepper",
+      "to taste",
+      null
+     ]
+    ],
+    "steps": [
+     [
+      "Brown the chicken for 5 minutes.",
+      [
+       [
+        300,
+        null
+       ]
+      ]
+     ],
+     [
+      "Add the coconut milk and simmer 20 min.",
+      [
+       [
+        1200,
+        "Simmer"
+       ]
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "name": "sections-and-text",
+   "input": {
+    "name": "Pancakes",
+    "recipeYield": "12 pancakes",
+    "totalTime": "PT1H5M",
+    "recipeIngredient": [
+     "1 1/2 cups flour",
+     "1 cup milk",
+     "1 egg"
+    ],
+    "recipeInstructions": [
+     {
+      "@type": "HowToSection",
+      "name": "Batter",
+      "itemListElement": [
+       {
+        "@type": "HowToStep",
+        "text": "Whisk everything.<br>Let rest 30 minutes."
+       }
+      ]
+     },
+     {
+      "@type": "HowToSection",
+      "name": "Cook",
+      "itemListElement": [
+       {
+        "@type": "HowToStep",
+        "text": "Fry in a hot pan, 2 minutes per side."
+       }
+      ]
+     }
+    ]
+   },
+   "expected": {
+    "title": "Pancakes",
+    "servings": 12,
+    "servings_text": "12 pancakes",
+    "minutes": [
+     null,
+     null,
+     65
+    ],
+    "hints": "",
+    "ingredients": [
+     [
+      190,
+      "g",
+      "flour",
+      null,
+      "1 1/2 cups"
+     ],
+     [
+      240,
+      "ml",
+      "milk",
+      null,
+      "1 cup"
+     ],
+     [
+      1,
+      null,
+      "egg",
+      null,
+      null
+     ]
+    ],
+    "steps": [
+     [
+      "Whisk everything. Let rest 30 minutes.",
+      [
+       [
+        1800,
+        "Rest"
+       ]
+      ]
+     ],
+     [
+      "Fry in a hot pan, 2 minutes per side.",
+      [
+       [
+        120,
+        "Fry"
+       ]
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "name": "instructions-as-text",
+   "input": {
+    "name": "Soup",
+    "recipeIngredient": [
+     "500 ml stock",
+     "1 onion"
+    ],
+    "recipeInstructions": "Chop the onion.\nSimmer in the stock for 20 minutes."
+   },
+   "expected": {
+    "title": "Soup",
+    "servings": null,
+    "servings_text": null,
+    "minutes": [
+     null,
+     null,
+     null
+    ],
+    "hints": "",
+    "ingredients": [
+     [
+      500,
+      "ml",
+      "stock",
+      null,
+      null
+     ],
+     [
+      1,
+      null,
+      "onion",
+      null,
+      null
+     ]
+    ],
+    "steps": [
+     [
+      "Chop the onion.",
+      []
+     ],
+     [
+      "Simmer in the stock for 20 minutes.",
+      [
+       [
+        1200,
+        "Simmer"
+       ]
+      ]
+     ]
+    ]
+   }
+  },
+  {
+   "name": "incomplete-no-shortcut",
+   "input": {
+    "name": "Teaser",
+    "recipeIngredient": [
+     "1 cup flour"
+    ],
+    "recipeInstructions": []
+   },
+   "expected": null
+  }
+ ]
+}

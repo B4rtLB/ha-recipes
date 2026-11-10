@@ -10,6 +10,14 @@ These were only tested in an emulated iPhone (Chromium), not in the installed ap
 - Sheets run to the bottom edge, also with the home indicator.
 - Developer view full screen (••• → Developer), and as a sidebar on the iPad/Mac.
 
+## Try lean mode on a real small model
+
+Built and tested with the fake AI only (`dev/test_parser.py`, `dev/e2e.py` section M). Still to do on Bart's Home Assistant:
+
+- Set Extraction to Lean with an Ollama AI Task, read a TikTok, an Instagram post, a web page with and without JSON-LD and a photo; compare with "Re-run AI only" (Extraction picker).
+- Send a few real `debug.json` files (Developer view data) to turn into golden fixtures in `dev/golden/`, then tune `preprocess.py` (headings, promo lines) and the parser on them.
+- Dutch sources with `language: en`: a JSON-LD page in Dutch goes through the AI (translation); check that it does.
+
 ## Known content issues
 
 - "Curry" (Apple Notes import) fails because the note has almost nothing in it. A few imports have 0 steps because the notes had none.

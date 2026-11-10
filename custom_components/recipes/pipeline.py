@@ -15,16 +15,21 @@ from typing import Any
 import aiohttp
 
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from . import ai, sources, video
+from . import ai, preprocess, sources, video
 from .const import (
     CONF_AI_TASK_ENTITY,
+    CONF_EXTRACTION_MODE,
     CONF_LANGUAGE,
     CONF_NOTIFY_SERVICE,
     CONF_STT_ENTITY,
     CONF_TRANSCRIBE,
+    DEFAULT_EXTRACTION_MODE,
     DEFAULT_LANGUAGE,
+    EXTRACTION_LEAN,
+    EXTRACTION_MODES,
     MAX_TRANSCRIBE_SECONDS,
     STATUS_ERROR,
     STATUS_PROCESSING,
@@ -145,11 +150,11 @@ class RecipeProcessor:
             raise ValueError("Nothing found to read a recipe from (empty caption and no video audio)")
 
         self._set(recipe_id, progress="Writing recipe", media=media, source=source)
-        prompt = ai.build_prompt(
-            "\n\n".join(material) or "(see attachment)", self.options.get(CONF_LANGUAGE, DEFAULT_LANGUAGE)
-        )
+        mode = self.mode()
+        dbg.data["mode"] = mode
         with dbg.step("ai"):
-            data = await self._extract(prompt, attachments, dbg.data["ai"])
+            data = await self._read_recipe(material, attachments, dbg.data.get("jsonld"), mode, dbg.data["ai"])
+        dbg.data["prepared"] = dbg.data["ai"].get("prepared")
 
         if data.get("recipe_found") is False:
             self._set(
@@ -267,6 +272,8 @@ class RecipeProcessor:
             with dbg.step("web"):
                 web = await sources.fetch_web(self.session, url)
             dbg.data["web_text"] = web.text
+            if web.jsonld:
+                dbg.data["jsonld"] = sources.slim_jsonld(web.jsonld)
             material.append(web.text)
             source["url_canonical"] = web.canonical_url
             if web.image_url and not media.get("image"):
@@ -282,6 +289,74 @@ class RecipeProcessor:
                 pass
 
         return material, attachments, media, {**source, "platform": platform}, notes
+
+    def mode(self, override: str | None = None) -> str:
+        """The extraction mode: classic (the AI does everything) or lean (small models)."""
+        mode = override or self.options.get(CONF_EXTRACTION_MODE, DEFAULT_EXTRACTION_MODE)
+        return mode if mode in EXTRACTION_MODES else DEFAULT_EXTRACTION_MODE
+
+    async def _read_recipe(
+        self,
+        material: list[str],
+        attachments: list[Path],
+        jsonld: dict[str, Any] | None,
+        mode: str,
+        record: dict[str, Any],
+        instruction: str | None = None,
+        prompt: str | None = None,
+    ) -> dict[str, Any]:
+        """Material in, recipe data in the full shape out (ready for ``ai.normalize``).
+
+        Classic: one big prompt, the AI converts and calculates. Lean: the material is cut
+        down first, the AI returns raw strings and the parser does the units and timers; a
+        JSON-LD recipe skips the AI for ingredients and steps altogether.
+        """
+        language = self.options.get(CONF_LANGUAGE, DEFAULT_LANGUAGE)
+        record["mode"] = mode
+        if mode != EXTRACTION_LEAN:
+            prompt = prompt or ai.build_prompt("\n\n".join(material) or "(see attachment)", language, instruction)
+            return await self._extract(prompt, attachments, record)
+
+        prepared = preprocess.prepare(material)
+        record["prepared"] = prepared
+        record["prepared_chars"] = sum(len(p) for p in prepared)
+        shortcut = None if (attachments or prompt) else self._jsonld_shortcut(jsonld, language)
+        if shortcut is not None:
+            record["shortcut"] = "jsonld"
+            return await self._finish_shortcut(shortcut, language, record, instruction)
+        prompt = prompt or ai.build_lean_prompt("\n\n".join(prepared) or "(see attachment)", language, instruction)
+        data = await self._extract(prompt, attachments, record)
+        return ai.lean_to_full(data) if data.get("recipe_found") is not False else data
+
+    @staticmethod
+    def _jsonld_shortcut(jsonld: dict[str, Any] | None, language: str) -> dict[str, Any] | None:
+        """Recipe data straight from schema.org JSON-LD, when it is complete and in our language."""
+        if not jsonld:
+            return None
+        data = sources.jsonld_to_data(jsonld)
+        if data is None:
+            return None
+        text = " ".join(data["steps"][:3])
+        return data if ai.guess_language(text) == language else None  # else the AI translates it
+
+    async def _finish_shortcut(
+        self, data: dict[str, Any], language: str, record: dict[str, Any], instruction: str | None
+    ) -> dict[str, Any]:
+        """Tags and a description for a JSON-LD recipe from a very small AI call."""
+        full = ai.lean_to_full(data)
+        record["ingredient_count"] = sum(len(g["items"]) for g in full["ingredient_groups"])
+        try:
+            reply = await self._extract(ai.build_tags_prompt(data, language, instruction), [], record)
+            tags = reply.get("tags")
+            full["tags"] = tags if isinstance(tags, list) else []
+            if reply.get("description") and not data.get("description"):
+                full["description"] = reply["description"]
+        except (ValueError, HomeAssistantError, TimeoutError) as err:
+            # Never lose a recipe over a missing tag: ai.normalize still guesses the protein.
+            record["tags_error"] = f"{type(err).__name__}: {err}"
+            _LOGGER.info("Tag step failed, saving the recipe without AI tags: %s", err)
+        full.pop("_hints", None)
+        return full
 
     async def _extract(self, prompt: str, attachments: list[Path], record: dict[str, Any]) -> dict[str, Any]:
         """The AI step on its own: prompt + attachments in, parsed JSON out."""
@@ -335,26 +410,32 @@ class RecipeProcessor:
         return await self.hass.async_add_executor_job(read)
 
     async def rerun_ai(
-        self, recipe_id: str, instruction: str | None = None, prompt: str | None = None
+        self,
+        recipe_id: str,
+        instruction: str | None = None,
+        prompt: str | None = None,
+        mode: str | None = None,
     ) -> dict[str, Any]:
-        """Run only the AI step again on the cached material. Nothing is saved."""
+        """Run only the AI step again on the cached material. Nothing is saved.
+
+        ``mode`` ("classic" or "lean") compares the two ways of reading on the same material;
+        without it the configured mode is used.
+        """
         dbg = await self.read_debug(recipe_id)
         if not dbg or not (dbg.get("material") or dbg.get("attachments")):
             raise ValueError("No cached material for this recipe yet. Use “Read recipe again” first.")
+        if mode is not None and mode not in EXTRACTION_MODES:
+            raise ValueError(f"Unknown mode: {mode}")
         folder = self.store.media_dir(recipe_id)
         names = [n for n in dbg.get("attachments") or [] if isinstance(n, str) and "/" not in n]
         attachments = await self.hass.async_add_executor_job(
             lambda: [folder / n for n in names if (folder / n).is_file()]
         )
-        if not prompt:
-            prompt = ai.build_prompt(
-                "\n\n".join(dbg.get("material") or []) or "(see attachment)",
-                self.options.get(CONF_LANGUAGE, DEFAULT_LANGUAGE),
-                instruction,
-            )
         record: dict[str, Any] = {"at": utcnow_iso(), "instruction": instruction or None}
         started = time.monotonic()
-        data = await self._extract(prompt, attachments, record)
+        data = await self._read_recipe(
+            dbg.get("material") or [], attachments, dbg.get("jsonld"), self.mode(mode), record, instruction, prompt
+        )
         record["seconds"] = round(time.monotonic() - started, 2)
         found = data.get("recipe_found") is not False
         record["fields"] = ai.normalize(data) if found else None
@@ -369,7 +450,9 @@ class RecipeProcessor:
         self._set(recipe_id, **record["fields"], status=STATUS_READY, error=None, progress=None)
         await self.store.async_rename_media(recipe_id)
         dbg = await self.read_debug(recipe_id) or {}
-        dbg["ai"] = {k: record.get(k) for k in ("entity", "prompt", "output", "instruction", "at")}
+        dbg["ai"] = {k: record.get(k) for k in ("entity", "prompt", "output", "instruction", "at", "mode", "prepared", "shortcut")}
+        dbg["mode"] = record.get("mode")
+        dbg["prepared"] = record.get("prepared")
         dbg.setdefault("timings", {})["ai"] = record.get("seconds")
         await self._write_debug(recipe_id, dbg)
 

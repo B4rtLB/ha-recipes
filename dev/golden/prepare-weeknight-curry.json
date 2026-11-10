@@ -1,0 +1,14 @@
+{
+ "kind": "prepare",
+ "cases": [
+  {
+   "name": "weeknight-curry",
+   "input": [
+    "SCHEMA.ORG RECIPE (JSON-LD):\n{\"name\": \"Weeknight Chicken Curry\", \"recipeYield\": \"4\", \"prepTime\": \"PT10M\", \"cookTime\": \"PT25M\", \"recipeIngredient\": [\"1 lb chicken thighs\", \"2 cloves garlic\", \"1 can coconut milk\"], \"recipeInstructions\": [{\"@someone\": \"HowToStep\", \"text\": \"Brown chicken 5 minutes.\"}, {\"@someone\": \"HowToStep\", \"text\": \"Simmer 20 min.\"}]}"
+   ],
+   "expected": [
+    "SCHEMA.ORG RECIPE (JSON-LD):\n{\"name\": \"Weeknight Chicken Curry\", \"recipeYield\": \"4\", \"prepTime\": \"PT10M\", \"cookTime\": \"PT25M\", \"recipeIngredient\": [\"1 lb chicken thighs\", \"2 cloves garlic\", \"1 can coconut milk\"], \"recipeInstructions\": [{\"@someone\": \"HowToStep\", \"text\": \"Brown chicken 5 minutes.\"}, {\"@someone\": \"HowToStep\", \"text\": \"Simmer 20 min.\"}]}"
+   ]
+  }
+ ]
+}

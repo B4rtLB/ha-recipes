@@ -1,0 +1,423 @@
+{
+ "kind": "ingredient",
+ "cases": [
+  {
+   "input": "1 cup flour",
+   "expected": {
+    "qty": 125,
+    "qty_max": null,
+    "unit": "g",
+    "name": "flour",
+    "note": null,
+    "original": "1 cup"
+   }
+  },
+  {
+   "input": "1½ cups all-purpose flour, sifted",
+   "expected": {
+    "qty": 190,
+    "qty_max": null,
+    "unit": "g",
+    "name": "all-purpose flour",
+    "note": "sifted",
+    "original": "1½ cups"
+   }
+  },
+  {
+   "input": "1 1/2 cups granulated sugar",
+   "expected": {
+    "qty": 300,
+    "qty_max": null,
+    "unit": "g",
+    "name": "granulated sugar",
+    "note": null,
+    "original": "1 1/2 cups"
+   }
+  },
+  {
+   "input": "½ cup rice",
+   "expected": {
+    "qty": 90,
+    "qty_max": null,
+    "unit": "g",
+    "name": "rice",
+    "note": null,
+    "original": "½ cup"
+   }
+  },
+  {
+   "input": "2-3 cloves garlic, minced",
+   "expected": {
+    "qty": 2,
+    "qty_max": 3,
+    "unit": "clove",
+    "name": "garlic",
+    "note": "minced",
+    "original": null
+   }
+  },
+  {
+   "input": "2 to 3 tbsp olive oil",
+   "expected": {
+    "qty": 2,
+    "qty_max": 3,
+    "unit": "tbsp",
+    "name": "olive oil",
+    "note": null,
+    "original": null
+   }
+  },
+  {
+   "input": "7 oz chicken breast",
+   "expected": {
+    "qty": 200,
+    "qty_max": null,
+    "unit": "g",
+    "name": "chicken breast",
+    "note": null,
+    "original": "7 oz"
+   }
+  },
+  {
+   "input": "1 lb ground beef",
+   "expected": {
+    "qty": 450,
+    "qty_max": null,
+    "unit": "g",
+    "name": "ground beef",
+    "note": null,
+    "original": "1 lb"
+   }
+  },
+  {
+   "input": "1.1 lb chicken thighs, boneless",
+   "expected": {
+    "qty": 500,
+    "qty_max": null,
+    "unit": "g",
+    "name": "chicken thighs",
+    "note": "boneless",
+    "original": "1.1 lb"
+   }
+  },
+  {
+   "input": "8 fl oz water",
+   "expected": {
+    "qty": 240,
+    "qty_max": null,
+    "unit": "ml",
+    "name": "water",
+    "note": null,
+    "original": "8 fl oz"
+   }
+  },
+  {
+   "input": "1 can (14 oz) diced tomatoes",
+   "expected": {
+    "qty": 1,
+    "qty_max": null,
+    "unit": "can",
+    "name": "diced tomatoes",
+    "note": "400 g",
+    "original": null
+   }
+  },
+  {
+   "input": "2 (14 oz) cans coconut milk",
+   "expected": {
+    "qty": 2,
+    "qty_max": null,
+    "unit": "can",
+    "name": "coconut milk",
+    "note": "400 g",
+    "original": null
+   }
+  },
+  {
+   "input": "400 g (14 oz) crushed tomatoes",
+   "expected": {
+    "qty": 400,
+    "qty_max": null,
+    "unit": "g",
+    "name": "crushed tomatoes",
+    "note": null,
+    "original": "14 oz"
+   }
+  },
+  {
+   "input": "200g spaghetti",
+   "expected": {
+    "qty": 200,
+    "qty_max": null,
+    "unit": "g",
+    "name": "spaghetti",
+    "note": null,
+    "original": null
+   }
+  },
+  {
+   "input": "1/2 tsp chili flakes",
+   "expected": {
+    "qty": 0.5,
+    "qty_max": null,
+    "unit": "tsp",
+    "name": "chili flakes",
+    "note": null,
+    "original": null
+   }
+  },
+  {
+   "input": "3 tbsp butter, melted",
+   "expected": {
+    "qty": 3,
+    "qty_max": null,
+    "unit": "tbsp",
+    "name": "butter",
+    "note": "melted",
+    "original": null
+   }
+  },
+  {
+   "input": "salt to taste",
+   "expected": {
+    "qty": null,
+    "qty_max": null,
+    "unit": null,
+    "name": "salt",
+    "note": "to taste",
+    "original": null
+   }
+  },
+  {
+   "input": "a pinch of salt",
+   "expected": {
+    "qty": 1,
+    "qty_max": null,
+    "unit": "pinch",
+    "name": "salt",
+    "note": null,
+    "original": null
+   }
+  },
+  {
+   "input": "a little olive oil",
+   "expected": {
+    "qty": null,
+    "qty_max": null,
+    "unit": null,
+    "name": "olive oil",
+    "note": "a little",
+    "original": null
+   }
+  },
+  {
+   "input": "2 eggs",
+   "expected": {
+    "qty": 2,
+    "qty_max": null,
+    "unit": null,
+    "name": "eggs",
+    "note": null,
+    "original": null
+   }
+  },
+  {
+   "input": "1 stick butter (optional)",
+   "expected": {
+    "qty": 1,
+    "qty_max": null,
+    "unit": "stick",
+    "name": "butter",
+    "note": "optional",
+    "original": null
+   }
+  },
+  {
+   "input": "Fresh basil leaves, for serving",
+   "expected": {
+    "qty": null,
+    "qty_max": null,
+    "unit": null,
+    "name": "fresh basil leaves",
+    "note": "for serving",
+    "original": null
+   }
+  },
+  {
+   "input": "• 1 large onion, finely chopped",
+   "expected": {
+    "qty": 1,
+    "qty_max": null,
+    "unit": null,
+    "name": "large onion",
+    "note": "finely chopped",
+    "original": null
+   }
+  },
+  {
+   "input": "- 4 chicken thighs (about 800 g)",
+   "expected": {
+    "qty": 4,
+    "qty_max": null,
+    "unit": null,
+    "name": "chicken thighs",
+    "note": "about 800 g",
+    "original": null
+   }
+  },
+  {
+   "input": "een snuf zout",
+   "expected": {
+    "qty": 1,
+    "qty_max": null,
+    "unit": "pinch",
+    "name": "zout",
+    "note": null,
+    "original": null
+   }
+  },
+  {
+   "input": "2 el sojasaus",
+   "expected": {
+    "qty": 2,
+    "qty_max": null,
+    "unit": "tbsp",
+    "name": "sojasaus",
+    "note": null,
+    "original": null
+   }
+  },
+  {
+   "input": "1 tl komijn",
+   "expected": {
+    "qty": 1,
+    "qty_max": null,
+    "unit": "tsp",
+    "name": "komijn",
+    "note": null,
+    "original": null
+   }
+  },
+  {
+   "input": "2 dl melk",
+   "expected": {
+    "qty": 200,
+    "qty_max": null,
+    "unit": "ml",
+    "name": "melk",
+    "note": null,
+    "original": "2 dl"
+   }
+  },
+  {
+   "input": "250 gr bloem",
+   "expected": {
+    "qty": 250,
+    "qty_max": null,
+    "unit": "g",
+    "name": "bloem",
+    "note": null,
+    "original": null
+   }
+  },
+  {
+   "input": "een halve ui",
+   "expected": {
+    "qty": 0.5,
+    "qty_max": null,
+    "unit": null,
+    "name": "ui",
+    "note": null,
+    "original": null
+   }
+  },
+  {
+   "input": "anderhalve liter bouillon",
+   "expected": {
+    "qty": 1.5,
+    "qty_max": null,
+    "unit": "l",
+    "name": "bouillon",
+    "note": null,
+    "original": null
+   }
+  },
+  {
+   "input": "wat peper naar smaak",
+   "expected": {
+    "qty": null,
+    "qty_max": null,
+    "unit": null,
+    "name": "peper",
+    "note": "naar smaak",
+    "original": null
+   }
+  },
+  {
+   "input": "1 blikje tomatenpuree",
+   "expected": {
+    "qty": 1,
+    "qty_max": null,
+    "unit": "can",
+    "name": "tomatenpuree",
+    "note": null,
+    "original": null
+   }
+  },
+  {
+   "input": "4 tenen knoflook",
+   "expected": {
+    "qty": 4,
+    "qty_max": null,
+    "unit": "clove",
+    "name": "knoflook",
+    "note": null,
+    "original": null
+   }
+  },
+  {
+   "input": "2 cups milk",
+   "expected": {
+    "qty": 480,
+    "qty_max": null,
+    "unit": "ml",
+    "name": "milk",
+    "note": null,
+    "original": "2 cups"
+   }
+  },
+  {
+   "input": "1 quart chicken stock",
+   "expected": {
+    "qty": 950,
+    "qty_max": null,
+    "unit": "ml",
+    "name": "chicken stock",
+    "note": null,
+    "original": "1 quart"
+   }
+  },
+  {
+   "input": "1 gallon water",
+   "expected": {
+    "qty": 3.8,
+    "qty_max": null,
+    "unit": "l",
+    "name": "water",
+    "note": null,
+    "original": "1 gallon"
+   }
+  },
+  {
+   "input": "3 cups cooked rice",
+   "expected": {
+    "qty": 720,
+    "qty_max": null,
+    "unit": "ml",
+    "name": "cooked rice",
+    "note": null,
+    "original": "3 cups"
+   }
+  }
+ ]
+}

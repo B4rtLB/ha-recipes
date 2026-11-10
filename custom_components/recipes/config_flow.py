@@ -19,6 +19,7 @@ from homeassistant.helpers import selector
 
 from .const import (
     CONF_AI_TASK_ENTITY,
+    CONF_EXTRACTION_MODE,
     CONF_LANGUAGE,
     CONF_NOTIFY_SERVICE,
     CONF_STT_ENTITY,
@@ -27,6 +28,8 @@ from .const import (
     CONF_WEBHOOK_ID,
     DEFAULT_LANGUAGE,
     DOMAIN,
+    DEFAULT_EXTRACTION_MODE,
+    EXTRACTION_MODES,
     LANGUAGES,
 )
 
@@ -46,6 +49,14 @@ def _schema(hass, defaults: dict[str, Any]) -> vol.Schema:
     fields[vol.Required(CONF_LANGUAGE, default=defaults.get(CONF_LANGUAGE, DEFAULT_LANGUAGE))] = selector.SelectSelector(
         selector.SelectSelectorConfig(
             options=[selector.SelectOptionDict(value=k, label=v) for k, v in LANGUAGES.items()],
+            mode=selector.SelectSelectorMode.DROPDOWN,
+        )
+    )
+    fields[
+        vol.Required(CONF_EXTRACTION_MODE, default=defaults.get(CONF_EXTRACTION_MODE, DEFAULT_EXTRACTION_MODE))
+    ] = selector.SelectSelector(
+        selector.SelectSelectorConfig(
+            options=[selector.SelectOptionDict(value=k, label=v) for k, v in EXTRACTION_MODES.items()],
             mode=selector.SelectSelectorMode.DROPDOWN,
         )
     )

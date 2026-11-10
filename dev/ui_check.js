@@ -52,6 +52,15 @@ const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails.p
   await page.$eval('.sheet', (s) => s.scrollTo(0, 330));
   await page.waitForTimeout(200);
   await shot('1d-settings-options');
+  ok(await page.$eval('[data-opt="extraction_mode"]', (e) => [...e.options].map((o) => o.value).join()) === 'classic,lean', 'settings: extraction mode choice');
+  await page.selectOption('[data-opt="extraction_mode"]', 'lean');
+  await page.waitForTimeout(400);
+  ok((await page.evaluate(async () => {
+    const t = JSON.parse(localStorage.getItem('recipes.auth')).access;
+    return (await (await fetch('/api/recipes/settings', { headers: { Authorization: 'Bearer ' + t } })).json()).options.extraction_mode;
+  })) === 'lean', 'extraction mode saved from the app');
+  await page.selectOption('[data-opt="extraction_mode"]', 'classic');
+  await page.waitForTimeout(400);
   await page.selectOption('[data-opt="language"]', 'nl');
   await page.click('[data-opt-toggle="transcribe"]');
   await page.waitForTimeout(500);
@@ -133,9 +142,12 @@ const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails.p
   await page.waitForTimeout(500);
   await shot('7-developer');
   await page.fill('#dev-instr', 'Make it spicier');
+  await page.selectOption('#dev-mode', 'lean');
   await page.click('#dev-run');
   await page.waitForSelector('#dev-save');
   await page.waitForTimeout(1500);
+  ok((await page.textContent('#dev-result .sub-h')).startsWith('Result · Lean'), 'developer view re-runs in lean mode');
+  ok((await page.$$eval('#dev-result .cmp div', (d) => d.map((x) => x.textContent).join(' '))).includes('200 °C (400 °F)'), 'lean result shows the converted temperature');
   ok((await page.$$('.cmp-k')).length >= 5, 'experiment shows current next to new');
   await shot('8-developer-result');
   await page.click('#dev-save');

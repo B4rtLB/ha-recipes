@@ -135,6 +135,42 @@ ok(s == 200 and r["title"] == "Renamed Curry" and (MEDIA / f"renamed-curry-{nl['
 s, r, _ = req("POST", f"/api/recipes/{nl['id']}/debug/apply"); ok(s == 400, f"apply needs a new run {s}")
 s, _, _ = req("GET", f"/api/recipes/media/{nl['id']}/debug.json"); ok(s == 404, f"debug.json is not served as media {s}")
 req("DELETE", f"/api/recipes/{nl['id']}")
+# M lean extraction mode: preprocess + parser + JSON-LD shortcut instead of an AI that converts
+s, r, _ = req("POST", "/api/recipes/settings", {"options": {"extraction_mode": "bogus"}}); ok(s == 400, f"unknown mode rejected {s}")
+s, r, _ = req("POST", "/api/recipes/settings", {"options": {"extraction_mode": "lean"}})
+ok(s == 200 and r["options"]["extraction_mode"] == "lean", f"lean mode saved {s}")
+s, r, _ = req("POST", "/api/recipes", {"url": FIX + "/p/curry.html", "force": True}); lj = wait(r["id"])
+ld = req("GET", f"/api/recipes/{lj['id']}/debug")[1]["debug"]
+ok(ld["mode"] == "lean" and ld["ai"]["shortcut"] == "jsonld" and ld["ai"]["prompt"].startswith("A recipe is already parsed"), f"json-ld shortcut, only a tags call {ld.get('mode')} {ld['ai'].get('shortcut')}")
+ing = [i for g in lj["ingredient_groups"] for i in g["items"]]
+ok(ing[0]["qty"] == 450 and ing[0]["unit"] == "g" and ing[0]["original"] == "1 lb" and ing[1]["unit"] == "clove", f"parser converts json-ld ingredients {ing}")
+ok(lj["status"] == "ready" and lj["title"] == "Weeknight Chicken Curry" and lj["total_min"] == 35 and lj["tags"] == ["Main", "Chicken", "Asian"], f"shortcut recipe {lj['title']} {lj['tags']} {lj['total_min']}")
+ok(lj["steps"][1]["timers"] == [{"seconds": 1200, "label": "Simmer"}], f"timers found in step text {lj['steps'][1]['timers']}")
+s, r, _ = req("POST", HOOK, {"url": "http://tiktok.com.localhost:8000/video.mp4", "force": True}, auth=False); lv = wait(r["id"], 180)
+lvd = req("GET", f"/api/recipes/{lv['id']}/debug")[1]["debug"]
+ok(lv["status"] == "ready" and lvd["mode"] == "lean" and lvd["ai"]["prompt"].startswith("Extract ONE recipe") and "shortcut" not in lvd["ai"], f"lean video recipe {lv.get('status')} {lv.get('error')}")
+ok(lvd["prepared"] and lvd["prepared"][-1].startswith("SPEECH TRANSCRIPT") and lvd["ai"]["output"].count("{") >= 3, "lean keeps the prepared material and the raw output")
+g0 = lv["ingredient_groups"][0]["items"]
+ok((g0[0]["qty"], g0[0]["unit"], g0[0]["name"], g0[0]["note"], g0[0]["original"]) == (500, "g", "chicken thighs", "boneless", "1.1 lb"), f"raw string parsed and converted {g0[0]}")
+ok((g0[1]["qty"], g0[1]["qty_max"], g0[1]["unit"]) == (2, 3, "clove") and g0[2]["qty"] == 0.5 and g0[3]["qty"] is None and g0[3]["note"] == "to taste", f"ranges, fractions, to taste {g0[1:]}")
+g1 = lv["ingredient_groups"][1]["items"]
+ok(lv["ingredient_groups"][1]["name"] == "Sauce" and (g1[0]["qty"], g1[0]["unit"]) == (200, "ml") and (g1[1]["qty"], g1[1]["unit"], g1[1]["name"]) == (1, "pinch", "zout"), f"groups and Dutch words {g1}")
+st = lv["steps"]
+ok(st[2]["text"] == "Bake at 200 °C (400 °F) for 1 hour 30 minutes." and st[2]["timers"] == [{"seconds": 5400, "label": "Bake"}], f"°F converted, 1 h 30 min one timer {st[2]}")
+ok(st[0]["timers"] == [{"seconds": 300, "label": "Fry"}] and st[1]["timers"] == [{"seconds": 600, "label": "Simmer"}] and st[3]["timers"] == [], f"timers per step {[x['timers'] for x in st]}")
+ok(lv["tags"] == ["Main", "Chicken", "Asian"], f"tags {lv['tags']}")
+# compare the two modes on the same material with "Re-run AI only"
+s, x, _ = req("POST", f"/api/recipes/{lv['id']}/debug/rerun", {"mode": "classic"})
+ok(s == 200 and x["mode"] == "classic" and "CRITICAL RULES" in x["prompt"] and x["fields"]["ingredient_groups"][0]["items"][0]["original"] == "1.1 lb", f"lean recipe re-run as classic {s}")
+s, x, _ = req("POST", f"/api/recipes/{b['id']}/debug/rerun", {"mode": "lean"})
+ok(s == 200 and x["mode"] == "lean" and x["prompt"].startswith("Extract ONE recipe") and x["prepared"] and x["fields"]["steps"][2]["timers"][0]["seconds"] == 5400, f"classic recipe re-run as lean {s}")
+s, x, _ = req("POST", f"/api/recipes/{lj['id']}/debug/rerun", {"mode": "classic"})
+ok(s == 200 and x["mode"] == "classic" and "shortcut" not in x, f"json-ld recipe re-run as classic {s}")
+s, x, _ = req("POST", f"/api/recipes/{lj['id']}/debug/rerun", {})
+ok(s == 200 and x["mode"] == "lean" and x["shortcut"] == "jsonld", f"re-run follows the setting {s}")
+s, x, _ = req("POST", f"/api/recipes/{lj['id']}/debug/rerun", {"mode": "bogus"}); ok(s == 400, f"bad mode in re-run {s}")
+s, r, _ = req("POST", "/api/recipes/settings", {"options": {"extraction_mode": "classic"}}); ok(r["options"]["extraction_mode"] == "classic", "back to classic")
+for rid in (lj["id"], lv["id"]): req("DELETE", f"/api/recipes/{rid}")
 # app shell
 s, html, _ = req("GET", "/recipes/", auth=False, raw=True); ok(s == 200 and b"app.js?v=" in html and b"__VERSION__" not in html, "index served")
 s, js, h = req("GET", "/recipes/sw.js", auth=False, raw=True); ok(s == 200 and h.get("Service-Worker-Allowed") == "/recipes/", "sw headers")

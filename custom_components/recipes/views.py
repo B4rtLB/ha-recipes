@@ -18,14 +18,17 @@ from homeassistant.exceptions import HomeAssistantError
 
 from .const import (
     CONF_AI_TASK_ENTITY,
+    CONF_EXTRACTION_MODE,
     CONF_LANGUAGE,
     CONF_NOTIFY_SERVICE,
     CONF_STT_ENTITY,
     CONF_TODO_ENTITY,
     CONF_TRANSCRIBE,
     CONF_WEBHOOK_ID,
+    DEFAULT_EXTRACTION_MODE,
     DEFAULT_LANGUAGE,
     DOMAIN,
+    EXTRACTION_MODES,
     LANGUAGES,
     SIGNED_URL_HOURS,
     STATUS_ERROR,
@@ -385,6 +388,7 @@ def _options_payload(hass: HomeAssistant, options: dict[str, Any]) -> dict[str, 
             CONF_AI_TASK_ENTITY: options.get(CONF_AI_TASK_ENTITY) or None,
             CONF_STT_ENTITY: options.get(CONF_STT_ENTITY) or None,
             CONF_LANGUAGE: options.get(CONF_LANGUAGE, DEFAULT_LANGUAGE),
+            CONF_EXTRACTION_MODE: options.get(CONF_EXTRACTION_MODE, DEFAULT_EXTRACTION_MODE),
             CONF_TRANSCRIBE: bool(options.get(CONF_TRANSCRIBE, True)),
             CONF_TODO_ENTITY: options.get(CONF_TODO_ENTITY) or None,
             CONF_NOTIFY_SERVICE: options.get(CONF_NOTIFY_SERVICE) or None,
@@ -393,6 +397,7 @@ def _options_payload(hass: HomeAssistant, options: dict[str, Any]) -> dict[str, 
             **{key: _entity_choices(hass, domain) for key, domain in ENTITY_OPTIONS.items()},
             CONF_NOTIFY_SERVICE: _notify_choices(hass),
             CONF_LANGUAGE: [{"id": k, "name": v} for k, v in LANGUAGES.items()],
+            CONF_EXTRACTION_MODE: [{"id": k, "name": v} for k, v in EXTRACTION_MODES.items()],
         },
     }
 
@@ -414,6 +419,9 @@ def _validate_options(hass: HomeAssistant, current: dict[str, Any], changes: Any
         elif key == CONF_LANGUAGE:
             if value not in LANGUAGES:
                 raise ValueError(f"Unknown language: {value}")
+        elif key == CONF_EXTRACTION_MODE:
+            if value not in EXTRACTION_MODES:
+                raise ValueError(f"Unknown extraction mode: {value}")
         elif key == CONF_TRANSCRIBE:
             if not isinstance(value, bool):
                 raise ValueError("transcribe must be true or false")
@@ -532,6 +540,7 @@ class RecipeDebugView(HomeAssistantView):
                 "debug": debug or {},
                 "folder": data.store.media_dir(recipe_id).name,
                 "language": data.processor.options.get(CONF_LANGUAGE, DEFAULT_LANGUAGE),
+                "mode": data.processor.mode(),
             }
         )
 
@@ -543,7 +552,7 @@ class RecipeDebugRerunView(HomeAssistantView):
     name = "api:recipes:debug:rerun"
 
     async def post(self, request: web.Request, recipe_id: str) -> web.Response:
-        """Body: {"instruction": optional extra instruction, "prompt": optional full prompt}.
+        """Body: {"instruction": extra instruction, "prompt": full prompt, "mode": "classic" or "lean"} (all optional).
 
         Returns the new result; nothing is saved until /debug/apply.
         """
@@ -559,6 +568,7 @@ class RecipeDebugRerunView(HomeAssistantView):
                 recipe_id,
                 instruction=str(body.get("instruction") or "").strip() or None,
                 prompt=str(body.get("prompt") or "").strip() or None,
+                mode=str(body.get("mode") or "").strip() or None,
             )
         except (ValueError, HomeAssistantError) as err:
             return self.json_message(f"AI re-run failed: {err}", HTTPStatus.BAD_REQUEST)
