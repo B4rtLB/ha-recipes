@@ -37,7 +37,7 @@ from .const import (
     URL_APP,
     VERSION,
 )
-from .pipeline import new_recipe_from_payload, save_import_image, save_upload
+from .pipeline import new_recipe_from_payload, save_upload
 
 if TYPE_CHECKING:
     from . import RecipesData
@@ -146,7 +146,7 @@ async def create_from_request(hass: HomeAssistant, request: web.Request) -> dict
     data = _data(hass)
     payload, upload = await _read_payload(request)
     if not payload and not upload:
-        raise web.HTTPBadRequest(text="Send a url, text, file or import")
+        raise web.HTTPBadRequest(text="Send a url, text or file")
     if upload and not (payload.get("url") or payload.get("text")):
         payload["force"] = True
     recipe, created = new_recipe_from_payload(hass, data.store, payload)
@@ -154,11 +154,6 @@ async def create_from_request(hass: HomeAssistant, request: web.Request) -> dict
         if upload:
             name = await save_upload(hass, data.store, recipe["id"], upload[0], upload[1])
             data.store.async_update(recipe["id"], {"upload": name, "source": recipe.get("source") or {"platform": "upload"}})
-        imp = payload.get("import") or {}
-        if imp.get("image_b64"):
-            name = await save_import_image(hass, data.store, recipe["id"], imp["image_b64"])
-            if name:
-                data.store.async_update(recipe["id"], {"media": {"image": name}})
         data.processor.enqueue(recipe["id"])
     return {"id": recipe["id"], "created": created, "status": recipe.get("status"), "title": recipe.get("title")}
 
@@ -167,7 +162,7 @@ async def create_from_request(hass: HomeAssistant, request: web.Request) -> dict
 
 
 async def handle_webhook(hass: HomeAssistant, webhook_id: str, request: web.Request) -> web.Response:
-    """Webhook used by the iOS share-sheet shortcut and the Notes import."""
+    """Webhook used by the iOS share-sheet shortcut."""
     try:
         result = await create_from_request(hass, request)
     except web.HTTPException as err:

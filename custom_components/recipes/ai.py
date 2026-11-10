@@ -17,47 +17,40 @@ from .const import LANGUAGES, TAG_GROUPS
 
 _LOGGER = logging.getLogger(__name__)
 
-PROMPT = """You receive source material for ONE recipe: it can be a social media caption, \
-a speech transcript of a cooking video, schema.org JSON-LD, the text of a web page, OCR \
-text, an attached photo/screenshot or an attached PDF. Extract only the recipe and return \
-it as a single JSON object. Output JSON only: no markdown, no code fences, no comments.
+PROMPT = """You receive source material for ONE recipe: a social media caption, a speech \
+transcript, schema.org JSON-LD, web page text, OCR text, a photo or a PDF. Return the recipe \
+as a single JSON object. JSON only: no markdown, no code fences, no comments.
 
 CRITICAL RULES
-- No hallucination: use only information found in the source. Never add or invent \
-ingredients or steps. When a caption and a transcript are both given, combine them: \
-amounts written in the caption win, the transcript fills in what the caption lacks. \
-"RECIPE TEXT" is the user's own saved note: combine it with the caption, the note wins on \
-amounts, the caption fills in missing steps.
-- Write all human-readable text in {language}. Translate if the source is in another \
-language. Keep it natural and concise.
-- Metric only: convert cups, oz, lb, fl oz, inches and °F to g, kg, ml, l, cm and °C. \
-Put the original amount in "original" (e.g. "7 oz", "1 cup"). For flour, sugar, rice \
-and similar dry goods convert cups to grams when you are confident, otherwise to ml. \
-Keep tsp/tbsp as "tsp"/"tbsp" (they are fine in a metric kitchen). Inside step text \
-write temperatures as "200 °C (400 °F)" when converted.
-- Numbers: "qty" is a number (fractions as decimals, 1/2 -> 0.5), "qty_max" only for \
-ranges ("2-3 cloves" -> qty 2, qty_max 3). Use null when there is no amount ("salt to \
-taste"). "unit" is short and lowercase (g, kg, ml, l, tsp, tbsp, clove, pinch, can, \
-bunch, slice...) or null for countable items ("2 eggs" -> qty 2, unit null, name "eggs").
-- Keep ingredient groups if the source has them (e.g. "Marinade", "Sauce"); otherwise \
-use one group with "name": null.
-- Steps: keep the order and all details of the source, one step per instruction \
-paragraph. Do not repeat the ingredient list inside steps unless the source does.
-- Timers: for every explicit waiting/cooking time in a step (bake 25 min, simmer 10-15 \
-minutes, rest 1 hour, marinate overnight = 8 h) add a timer with the duration in seconds \
-(for a range use the lower bound) and a 1-3 word label (e.g. "Simmer sauce"). No timers \
-for vague times ("until golden").
-- Times and servings: use the source. If missing you may estimate prep/cook/total minutes \
-and servings from cues in the source (oven time, pan size, "serves 4") and then set \
-"estimated": true. Estimates must never lead you to invent ingredients or steps.
-- Title: the real dish name, no emojis, no hashtags, no clickbait ("You NEED this" -> \
-the dish name). Description: one short sentence about the dish, or null.
-- Tags: pick AT MOST ONE tag per group below, skip a group when nothing clearly fits, \
-use tags exactly as written:
+- Use only the source. Never add or invent ingredients or steps. Caption and transcript \
+together: amounts in the caption win, the transcript fills the gaps. "RECIPE TEXT" is the \
+user's own note: it wins on amounts, the caption fills in missing steps.
+- Write all text in {language}; translate if the source is in another language. Natural \
+and concise.
+- Metric only: convert cups, oz, lb, fl oz, inches and °F to g, kg, ml, l, cm and °C and \
+put the original amount in "original" (e.g. "7 oz", "1 cup"). Cups of flour, sugar, rice \
+and similar dry goods become grams when you are confident, otherwise ml. Keep tsp and \
+tbsp. In step text write converted temperatures as "200 °C (400 °F)".
+- "qty" is a number (1/2 -> 0.5); "qty_max" only for ranges ("2-3 cloves" -> qty 2, qty_max \
+3); null when there is no amount. "unit" is short and lowercase (g, kg, ml, l, tsp, tbsp, \
+clove, pinch, can, bunch, slice...) or null for countable items ("2 eggs" -> qty 2, unit null).
+- Keep the source's ingredient groups ("Marinade", "Sauce"); otherwise one group with \
+"name": null.
+- Steps: keep the order and all details, one step per instruction. Don't repeat the \
+ingredient list inside steps.
+- Timers: for every explicit waiting or cooking time in a step (bake 25 min, simmer 10-15 \
+minutes, marinate overnight = 8 h) add a timer in seconds (range: lower bound) with a 1-3 \
+word label ("Simmer sauce"). None for vague times ("until golden").
+- Times and servings: use the source. If missing, estimate prep/cook/total minutes and \
+servings from cues (oven time, pan size, "serves 4") and set "estimated": true. Estimates \
+never justify inventing ingredients or steps.
+- Title: the real dish name, no emoji, hashtags or clickbait. Description: one short \
+sentence about the dish, or null.
+- Tags: AT MOST ONE per group, exactly as written, skip a group when nothing clearly fits:
 {tags}
-  Quick = ready in 30 minutes or less. MealPrep = keeps well in the fridge and reheats well.
-  Protein: always tag the main meat or fish when the dish has one (bacon, ham and chorizo \
-are Pork). Vegetarian only when there is no meat or fish at all.
+  Quick = ready in 30 minutes or less. MealPrep = keeps and reheats well. Protein: always \
+tag the main meat or fish (bacon, ham and chorizo are Pork); Vegetarian only when there is \
+no meat or fish at all.
 
 OUTPUT SHAPE
 {{

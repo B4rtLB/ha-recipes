@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 from collections.abc import AsyncIterator, Iterator
 from contextlib import contextmanager
 import json
@@ -199,7 +198,7 @@ class RecipeProcessor:
             url = better
             self.store.async_update(recipe_id, {"source": source})
         platform = source.get("platform") or (
-            sources.detect_platform(url) if url else ("notes" if recipe.get("imported_from") else "text" if recipe.get("input_text") else "upload")
+            sources.detect_platform(url) if url else ("text" if recipe.get("input_text") else "upload")
         )
         material: list[str] = []
         attachments: list[Path] = []
@@ -209,7 +208,7 @@ class RecipeProcessor:
             shared=recipe.get("shared"), input_text=recipe.get("input_text"), url=url, platform=platform, notes=notes
         )
 
-        # 1. Imported text (Apple Notes import / shared text) --------------------
+        # 1. Shared text (copied from somewhere, or a saved note) ----------------
         if recipe.get("input_text"):
             material.append("RECIPE TEXT:\n" + recipe["input_text"])
 
@@ -247,8 +246,7 @@ class RecipeProcessor:
             if social.get("author"):
                 source["author"] = social["author"]
             if social.get("text"):
-                # Also for imported notes: the original caption often has the full recipe.
-                material.append("SOCIAL MEDIA CAPTION:\n" + social["text"])
+                                material.append("SOCIAL MEDIA CAPTION:\n" + social["text"])
             caption_len = len(social.get("text") or "")
             have_text = _looks_like_recipe(social.get("text", "")) or _looks_like_recipe(
                 recipe.get("input_text") or ""
@@ -491,34 +489,6 @@ class RecipeProcessor:
             if info.get("thumbnail"):
                 await self._save_remote_image(info["thumbnail"], folder, media, key="poster", referer=url)
 
-        if platform == "instagram" and self.options.get("instagram_embed_fallback") and (
-            not info or not info.get("path") or not result.get("text")
-        ):
-            # The public embed page used to carry caption + video_url; Instagram now renders
-            # it client-side, so this is off by default and kept for if that changes back.
-            embed = await sources.fetch_instagram_embed(self.session, url)
-            if embed:
-                notes.append("instagram embed fallback")
-                result.setdefault("canonical_url", embed.canonical_url)
-                if embed.text and not result.get("text"):
-                    result["text"] = embed.text
-                if embed.author and not result.get("author"):
-                    result["author"] = embed.author
-                if embed.video_url and not media.get("video"):
-                    try:
-                        data, _ = await sources.download_file(
-                            self.session, embed.video_url, 400 * 1024 * 1024, referer="https://www.instagram.com/"
-                        )
-                        raw = folder / "download.mp4"
-                        await self.hass.async_add_executor_job(video.write_bytes, raw, data)
-                        await self.hass.async_add_executor_job(video.make_ios_friendly, raw, folder / "video.mp4")
-                        probe = await self.hass.async_add_executor_job(video.probe, folder / "video.mp4")
-                        media.update(video="video.mp4", **{k: probe.get(k) for k in ("width", "height", "duration")})
-                    except (aiohttp.ClientError, TimeoutError, ValueError) as err:
-                        notes.append(f"embed video failed: {err}")
-                if embed.image_url and not media.get("poster"):
-                    await self._save_remote_image(embed.image_url, folder, media, key="poster")
-
         if not result.get("text") or not (media.get("video") or media.get("poster")):
             meta = await sources.fetch_social_meta(self.session, url)
             if meta:
@@ -600,8 +570,8 @@ class RecipeProcessor:
     async def _notify(self, recipe_id: str, failed: bool = False) -> None:
         service = (self.options.get(CONF_NOTIFY_SERVICE) or "").strip()
         recipe = self.store.recipes.get(recipe_id) or {}
-        if not service or recipe.get("imported_from"):
-            return  # no notification storm during a bulk import
+        if not service:
+            return
         domain, _, name = service.partition(".")
         if not name:
             domain, name = "notify", domain
@@ -664,39 +634,16 @@ def new_recipe_from_payload(
     shared = "\n".join(x for x in (raw_url, text) if x).strip()
     if url and text.strip() == url:
         text = ""
-    imp_in = payload.get("import") or {}
-    if not payload.get("force"):
-        existing = None
-        if url:
-            existing = store.find_by_url(url)
-        elif imp_in.get("source_url"):
-            existing = store.find_by_url(imp_in["source_url"])
-        elif imp_in.get("title"):
-            existing = next(
-                (r for r in store.recipes.values()
-                 if r.get("imported_from") == "apple_notes" and r.get("import_title") == imp_in["title"]),
-                None,
-            )
-        if existing:
-            return existing, False
+    if url and not payload.get("force") and (existing := store.find_by_url(url)):
+        return existing, False
 
     data: dict[str, Any] = {"status": STATUS_QUEUED}
-    if shared and not payload.get("import"):
+    if shared:
         # What the share sheet sent, kept for repairs and debugging.
         data["shared"] = shared[:6000]
     if url:
         data["source"] = {"url": url, "platform": sources.detect_platform(url)}
-    if payload.get("import"):
-        imp = payload["import"]
-        data["input_text"] = imp.get("text")
-        data["title"] = imp.get("title")
-        data["imported_from"] = "apple_notes"
-        data["import_title"] = imp.get("title")
-        if imp.get("created"):
-            data["created"] = imp["created"]
-        if imp.get("source_url"):
-            data["source"] = {"url": imp["source_url"], "platform": sources.detect_platform(imp["source_url"])}
-    elif text and len(text) > 40 and (not url or len(text) > len(url) + 40):
+    if text and len(text) > 40 and (not url or len(text) > len(url) + 40):
         # Shared text that contains a recipe (e.g. copied from somewhere)
         data["input_text"] = text
     recipe = store.async_create(data)
@@ -713,17 +660,6 @@ async def save_upload(
     name = f"upload{suffix}"
     await hass.async_add_executor_job(video.write_bytes, store.media_dir(recipe_id) / name, content)
     return name
-
-
-async def save_import_image(hass: HomeAssistant, store: RecipeStore, recipe_id: str, b64: str) -> str | None:
-    """Store an imported (base64) image as the recipe photo."""
-    try:
-        raw = base64.b64decode(b64)
-    except ValueError:
-        return None
-    folder = store.media_dir(recipe_id)
-    ok = await hass.async_add_executor_job(video.save_image, raw, folder / "image.jpg")
-    return "image.jpg" if ok else None
 
 
 __all__ = ["RecipeProcessor", "new_recipe_from_payload", "normalize_url", "save_upload"]

@@ -20,6 +20,5 @@ Built and tested with the fake AI only (`dev/test_parser.py`, `dev/e2e.py` secti
 
 ## Known content issues
 
-- "Curry" (Apple Notes import) fails because the note has almost nothing in it. A few imports have 0 steps because the notes had none.
 - Instagram post "Cheddar Chili Garlic Bread" has no video because yt-dlp needs cookies (app → Settings → Instagram).
 - A missing Protein tag is now filled in from the title or ingredients (`guess_protein` in `ai.py`). Existing recipes only get it when they are read again, or with "Re-run AI only" in the developer view.

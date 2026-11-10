@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
 from datetime import UTC, datetime
 import logging
 from pathlib import Path
@@ -46,7 +45,6 @@ class RecipeStore:
         self._store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, STORAGE_KEY)
         self.recipes: dict[str, dict[str, Any]] = {}
         self.root = media_root(hass)
-        self._listeners: list[Callable[[str], None]] = []
         # Held by the pipeline while it writes into a media folder, so a folder
         # is never renamed under it.
         self.media_lock = asyncio.Lock()
@@ -91,17 +89,6 @@ class RecipeStore:
     @callback
     def _schedule_save(self) -> None:
         self._store.async_delay_save(lambda: {"recipes": self.recipes}, 1)
-
-    @callback
-    def async_add_listener(self, listener: Callable[[str], None]) -> Callable[[], None]:
-        """Listen for recipe changes."""
-        self._listeners.append(listener)
-        return lambda: self._listeners.remove(listener)
-
-    @callback
-    def _notify(self, recipe_id: str) -> None:
-        for listener in list(self._listeners):
-            listener(recipe_id)
 
     def media_dir(self, recipe_id: str) -> Path:
         """Return the media folder for a recipe (not created)."""
@@ -148,7 +135,6 @@ class RecipeStore:
         }
         self.recipes[recipe_id] = recipe
         self._schedule_save()
-        self._notify(recipe_id)
         return recipe
 
     @callback
@@ -158,7 +144,6 @@ class RecipeStore:
         recipe.update(changes)
         recipe["updated"] = utcnow_iso()
         self._schedule_save()
-        self._notify(recipe_id)
         return recipe
 
     async def async_delete(self, recipe_id: str) -> None:
@@ -167,7 +152,6 @@ class RecipeStore:
         self.recipes.pop(recipe_id, None)
         self._schedule_save()
         await self.hass.async_add_executor_job(shutil.rmtree, folder, True)
-        self._notify(recipe_id)
 
     @callback
     def find_by_url(self, url: str) -> dict[str, Any] | None:

@@ -23,7 +23,6 @@ Open work is in `TODO.md`.
 | `custom_components/recipes/const.py` | Keys, `TAG_GROUPS` (order = filter chip order in the app; mirrored in `app.js`) |
 | `custom_components/recipes/frontend/` | The PWA: `index.html`, `app.js` (vanilla JS, no build step), `app.css`, `sw.js`, manifest. Icons are drawn at runtime by `icons.py` |
 | `shortcuts/build_shortcuts.py` | Builds the iOS shortcuts "Save Recipe" and "Recipe Timer" (sign on a Mac: `shortcuts sign --mode anyone`) |
-| `tools/` | One-off Apple Notes export/import |
 | `dev/` | Local test Home Assistant with a fake AI; e2e, UI tests and golden parser tests (`dev/golden/`, see below) |
 
 ## How a recipe is made

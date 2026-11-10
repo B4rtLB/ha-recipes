@@ -29,17 +29,6 @@ Open `https://<your-home-assistant>/recipes/` in Safari → Share → **Add to H
    - **Save Recipe** – in the share sheet of TikTok, Instagram, Safari and Photos. Sends the link/photo/PDF to the Recipes webhook.
    - **Recipe Timer** – started by the app's timer buttons; starts a Clock timer.
 
-### Importing from Apple Notes
-
-On the Mac:
-
-```bash
-python3 tools/export_notes.py                    # reads the "Recipes" folder (read-only)
-python3 tools/import_notes.py https://<ha>/api/webhook/<id>
-```
-
-Re-running is safe; recipes that already exist are skipped.
-
 ## API
 
 All endpoints need a Home Assistant token, except the webhook and the app shell.

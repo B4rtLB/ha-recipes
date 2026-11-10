@@ -3,7 +3,7 @@
 Run dev/run.sh first (and dev/bootstrap.py once). Deletes all recipes in the dev instance!
 """
 
-import base64, json, os, subprocess, sys, time, urllib.error, urllib.request, uuid
+import json, os, subprocess, sys, time, urllib.error, urllib.request, uuid
 
 from hadev import BASE as B, CONFIG, DEV, access_token, media_root
 
@@ -78,10 +78,6 @@ ok(d["status"] == "ready" and d["media"].get("image") == "image.jpg", f"upload r
 s, r, _ = req("POST", HOOK, img, auth=False, headers={"Content-Type": "image/jpeg"}); ok(s == 200 and r["created"], f"raw upload {s} {r}")
 d2 = wait(r["id"]); ok(d2["status"] == "ready" and d2["media"].get("image") == "image.jpg", f"raw upload recipe {d2.get('error')}")
 last = json.load(urllib.request.urlopen(urllib.request.Request(B + "/api/states/ai_task.fake_ai", headers={"Authorization": "Bearer " + TOK})))
-# E import with b64
-s, r, _ = req("POST", HOOK, {"import": {"title": "Butter Bean Curry", "text": "Butter Bean Curry\nPrep time: 10\nIngredients\n- 1 can beans", "image_b64": base64.b64encode(img).decode(), "source_url": FIX + "/p/none.html", "created": "2026-03-03T18:39:43+00:00"}}, auth=False)
-e = wait(r["id"])
-ok(e["status"] == "ready" and e["title"] == "Butter Bean Curry" and e["created"].startswith("2026-03-03") and e["media"].get("image"), f"import {e.get('title')} {e.get('created')} {e.get('error')}")
 # H no recipe
 s, r, _ = req("POST", HOOK, {"text": "NO_RECIPE just a dance video with lots of words to exceed forty characters"}, auth=False)
 h_ = wait(r["id"]); ok(h_["status"] == "error" and "No recipe" in h_["error"], f"no recipe -> error {h_.get('error')}")

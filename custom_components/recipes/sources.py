@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import html as html_lib
 import json
 import logging
@@ -29,14 +29,6 @@ def detect_platform(url: str) -> str:
     if "youtube.com" in host or "youtu.be" in host:
         return "youtube"
     return "web"
-
-
-def first_url(text: str) -> str | None:
-    """Find the first URL in a block of shared text."""
-    match = URL_RE.search(text or "")
-    if not match:
-        return None
-    return match.group(0).rstrip(").,;!?]")
 
 
 ASSET_EXT = (
@@ -113,12 +105,9 @@ class SourceContent:
 
     text: str = ""
     image_url: str | None = None
-    video_url: str | None = None
     title: str | None = None
-    author: str | None = None
     canonical_url: str | None = None
     jsonld: dict[str, Any] | None = None
-    notes: list[str] = field(default_factory=list)
 
 
 async def fetch_html(
@@ -343,13 +332,7 @@ async def fetch_web(session: aiohttp.ClientSession, url: str) -> SourceContent:
     return content
 
 
-# ---------------------------------------------------------------- Instagram
-
-
-def instagram_shortcode(url: str) -> str | None:
-    """Extract the post/reel shortcode from an Instagram URL."""
-    match = re.search(r"instagram\.com/(?:[^/]+/)?(?:p|reel|reels|tv)/([A-Za-z0-9_-]+)", url)
-    return match.group(1) if match else None
+# ---------------------------------------------------------------- social posts
 
 
 def _json_unescape(value: str) -> str:
@@ -357,56 +340,6 @@ def _json_unescape(value: str) -> str:
         return json.loads(f'"{value}"')
     except ValueError:
         return value.replace("\\/", "/").replace("\\u0026", "&")
-
-
-async def fetch_instagram_embed(
-    session: aiohttp.ClientSession, url: str
-) -> SourceContent | None:
-    """Fallback without login: the public embed page.
-
-    The embed page usually contains the caption, a cover image and for many
-    reels also a direct ``video_url``.
-    """
-    code = instagram_shortcode(url)
-    if not code:
-        return None
-    embed_url = f"https://www.instagram.com/p/{code}/embed/captioned/"
-    try:
-        _, html = await fetch_html(session, embed_url, desktop=True)
-    except aiohttp.ClientError as err:
-        _LOGGER.debug("Instagram embed fetch failed: %s", err)
-        return None
-    content = SourceContent(canonical_url=f"https://www.instagram.com/p/{code}/")
-
-    # Caption block in the server-rendered HTML.
-    cap = re.search(r'<div class="Caption"[^>]*>(.*?)<div class="CaptionComments"', html, re.DOTALL)
-    if cap:
-        caption = re.sub(r"<br\s*/?>", "\n", cap.group(1))
-        caption = re.sub(r"<a[^>]*class=\"CaptionUsername\"[^>]*>.*?</a>", "", caption, flags=re.DOTALL)
-        caption = html_lib.unescape(re.sub(r"<[^>]+>", "", caption)).strip()
-        content.text = caption
-    user = re.search(r'class="UsernameText"[^>]*>([^<]+)<', html)
-    if user:
-        content.author = html_lib.unescape(user.group(1)).strip()
-
-    # Data embedded as escaped JSON (contextJSON / gql_data).
-    video = re.search(r'\\?"video_url\\?"\s*:\s*\\?"(.*?)\\?"', html)
-    if video:
-        content.video_url = _json_unescape(video.group(1).replace('\\\\', '\\'))
-    if not content.text:
-        text = re.search(r'\\?"edge_media_to_caption\\?".*?\\?"text\\?"\s*:\s*\\?"(.*?)\\?"\}', html, re.DOTALL)
-        if text:
-            content.text = _json_unescape(text.group(1).replace('\\\\', '\\'))
-    img = re.search(r'<img[^>]+class="EmbeddedMediaImage"[^>]+src="([^"]+)"', html)
-    if img:
-        content.image_url = html_lib.unescape(img.group(1))
-    else:
-        disp = re.search(r'\\?"display_url\\?"\s*:\s*\\?"(.*?)\\?"', html)
-        if disp:
-            content.image_url = _json_unescape(disp.group(1).replace('\\\\', '\\'))
-    if not (content.text or content.video_url or content.image_url):
-        return None
-    return content
 
 
 async def fetch_social_meta(session: aiohttp.ClientSession, url: str) -> SourceContent | None:
@@ -423,7 +356,6 @@ async def fetch_social_meta(session: aiohttp.ClientSession, url: str) -> SourceC
     ig = re.match(r'^[\d.,KkMm]+ likes?, [\d.,KkMm]+ comments? - ([\w.]+) on [^:]+:\s*["“](.*)["”]\.?\s*$',
                   content.text, re.DOTALL)
     if ig:
-        content.author = ig.group(1)
         content.text = ig.group(2).strip()
     # TikTok web pages embed the full description as JSON.
     desc = re.search(r'"desc":"(.*?)","createTime"', html)
