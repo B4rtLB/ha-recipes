@@ -2,3 +2,12 @@ __pycache__/
 *.pyc
 .DS_Store
 custom_components/recipes/frontend/icons/
+dev/.venv/
+dev/config/
+dev/node_modules/
+dev/package-lock.json
+dev/.tokens.json
+dev/shots/
+dev/fixtures/*.mp4
+dev/fixtures/dish.jpg
+dev/.venv
