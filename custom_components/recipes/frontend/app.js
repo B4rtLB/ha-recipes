@@ -683,8 +683,6 @@ function setupVideo() {
   // Pause when scrolled away; never auto-resume (the user decides).
   const io = new IntersectionObserver(([entry]) => {
     if (entry.intersectionRatio < 0.35 && !vid.paused) vid.pause();
-    // Tall (full screen) video scrolled completely away: fold it back without a jump.
-    if (!entry.isIntersecting && hero.classList.contains("tall")) collapse(true);
   }, { threshold: [0, 0.35, 1] });
   io.observe(hero);
   const onHide = () => { if (document.hidden && !vid.paused) vid.pause(); };
@@ -694,77 +692,104 @@ function setupVideo() {
 
   // ---- full screen: the video grows to fill the screen inside the page, the
   // recipe stays below it (title over the bottom), so you simply scroll on.
-  const expand = () => {
-    if (hero.classList.contains("tall")) return;
-    window.scrollTo({ top: 0 });
+  // Everything animates the hero's height, also while pulling, so there is
+  // never a switch between two kinds of animation.
+  let base = hero.offsetHeight;
+  const isTall = () => hero.classList.contains("tall");
+  const animateTo = (px, then) => {
+    hero.classList.remove("pulling");
     hero.style.height = hero.offsetHeight + "px";
     void hero.offsetHeight;
+    hero.style.height = px + "px";
+    let done = false;
+    const fin = () => { if (!done) { done = true; then?.(); } };
+    hero.addEventListener("transitionend", fin, { once: true });
+    setTimeout(fin, 550);
+  };
+  const expand = () => {
+    if (isTall()) return;
+    if (window.scrollY > 0) window.scrollTo({ top: 0 });
     hero.classList.add("tall");
-    hero.style.height = window.innerHeight + "px";
-    const done = () => { hero.style.height = ""; };
-    hero.addEventListener("transitionend", done, { once: true });
-    setTimeout(done, 600);
+    animateTo(window.innerHeight);
     vid.muted = false; mute.innerHTML = I.soundOn;
     play();
     full.innerHTML = I.collapse;
     full.setAttribute("aria-label", "Exit full screen");
   };
-  function collapse(offscreen = false) {
-    if (!hero.classList.contains("tall")) return;
-    const before = hero.offsetHeight;
+  const collapse = () => {
+    if (!isTall()) return;
     hero.classList.remove("tall");
     full.innerHTML = I.expand;
     full.setAttribute("aria-label", "Full screen");
-    if (offscreen) {
-      // The hero is above the viewport: keep what you're reading in place.
-      hero.style.transition = "none";
-      const after = hero.offsetHeight;
-      window.scrollBy(0, after - before);
-      void hero.offsetHeight;
-      hero.style.transition = "";
-      return;
-    }
-    hero.style.height = before + "px";
-    void hero.offsetHeight;
-    hero.style.height = "";
-  }
-  full.onclick = (e) => { e.stopPropagation(); hero.classList.contains("tall") ? collapse() : expand(); };
-
-  // Pull down at the very top: expand (or fold back when already full screen).
-  const PULL = 90;
-  let startY = null, pull = 0;
-  const eased = (d) => PULL * 1.6 * (1 - Math.exp(-d / (PULL * 1.6)));
-  const reset = () => {
-    pull = 0;
-    hero.classList.remove("pulling");
-    hero.style.transform = "";
-    hint.style.opacity = 0; hint.classList.remove("ready"); delete hint.dataset.buzzed;
+    animateTo(base, () => { if (!isTall()) hero.style.height = ""; });
   };
+  // Fold back silently once the full screen video has been scrolled away and
+  // scrolling has come to rest (changing it mid-scroll makes iOS jump).
+  let touching = false, idle = 0;
+  const foldIfAway = () => {
+    if (touching) { idle = setTimeout(foldIfAway, 250); return; }
+    if (!isTall() || hero.getBoundingClientRect().bottom > 0) return;
+    // Keep whatever is on screen exactly where it is: measure an element below
+    // the video before and after, and scroll by the difference (works whether
+    // or not the browser does its own scroll anchoring).
+    const anchor = hero.nextElementSibling || hero.parentElement;
+    const before = anchor.getBoundingClientRect().top;
+    hero.style.transition = "none";
+    hero.classList.remove("tall");
+    hero.style.height = "";
+    full.innerHTML = I.expand;
+    full.setAttribute("aria-label", "Full screen");
+    const shift = anchor.getBoundingClientRect().top - before;
+    if (shift) window.scrollBy(0, shift);
+    void hero.offsetHeight;
+    hero.style.transition = "";
+  };
+  const onScroll = () => { clearTimeout(idle); if (isTall()) idle = setTimeout(foldIfAway, 300); };
+  window.addEventListener("scroll", onScroll, { passive: true });
+  const onResize = () => { if (isTall()) hero.style.height = window.innerHeight + "px"; else if (!hero.style.height) base = hero.offsetHeight; };
+  window.addEventListener("resize", onResize);
+  detailCleanup.push(() => { clearTimeout(idle); window.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onResize); });
+  full.onclick = (e) => { e.stopPropagation(); isTall() ? collapse() : expand(); };
+
+  // Pull down at the very top: the video stretches with your finger; let go
+  // far enough and it continues to full screen (or back when already full).
+  const PULL = 90;
+  let startY = null, pull = 0, startH = 0;
+  const eased = (d) => PULL * 1.6 * (1 - Math.exp(-d / (PULL * 1.6)));
+  const hideHint = () => { hint.style.opacity = 0; hint.classList.remove("ready"); delete hint.dataset.buzzed; };
   const onStart = (e) => {
+    touching = true;
     startY = e.touches.length === 1 && window.scrollY <= 0 && !e.target.closest(".scrub, .sheet") ? e.touches[0].clientY : null;
     pull = 0;
   };
   const onMove = (e) => {
     if (startY == null) return;
     const dy = e.touches[0].clientY - startY;
-    if (dy <= 0 || window.scrollY > 0) { if (pull) reset(); return; }
+    if (dy <= 0 || window.scrollY > 0) {
+      if (pull) { pull = 0; hideHint(); animateTo(startH, () => { if (!isTall()) hero.style.height = ""; }); }
+      return;
+    }
     e.preventDefault();
+    if (!pull) startH = hero.offsetHeight;
     pull = dy;
     const p = eased(dy);
     hero.classList.add("pulling");
-    hero.style.transform = `translateY(${p * 0.25}px) scale(${1 + p / 520})`;
-    const tall = hero.classList.contains("tall");
-    hint.querySelector("span").textContent = tall ? "Release to shrink" : "Release for full screen";
+    hero.style.height = startH + p + "px";
+    hint.querySelector("span").textContent = isTall() ? "Release to shrink" : "Release for full screen";
     hint.style.opacity = Math.min(1, p / PULL);
     hint.classList.toggle("ready", p >= PULL * 0.95);
     if (p >= PULL * 0.95 && !hint.dataset.buzzed) { hint.dataset.buzzed = 1; navigator.vibrate?.(10); }
   };
-  const onEnd = () => {
+  const onEnd = (e) => {
+    if (!e.touches || e.touches.length === 0) touching = false;
     if (startY == null) return;
+    const wasPulling = pull > 0;
     const go = eased(pull) >= PULL * 0.95;
-    reset();
-    startY = null;
-    if (go) hero.classList.contains("tall") ? collapse() : expand();
+    hideHint();
+    startY = null; pull = 0;
+    if (!wasPulling) return;
+    if (go) isTall() ? collapse() : expand();
+    else animateTo(isTall() ? window.innerHeight : startH, () => { if (!isTall()) hero.style.height = ""; });
   };
   document.addEventListener("touchstart", onStart, { passive: true });
   document.addEventListener("touchmove", onMove, { passive: false });

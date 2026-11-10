@@ -276,9 +276,8 @@ img { display: block; }
 .video-ui .icon-btn svg { width: 16px; height: 16px; }
 
 /* pull-to-full-screen */
-.hero { transform-origin: 50% 0; }
+.hero { transition: height 0.45s cubic-bezier(0.22, 1, 0.36, 1); }
 .hero.pulling { transition: none; }
-.hero:not(.pulling) { transition: transform 0.45s var(--spring), height 0.45s var(--ease); }
 .pull-hint {
   position: absolute; left: 50%; top: calc(var(--safe-top) + 64px); z-index: 4; transform: translateX(-50%);
   display: flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 16px;
