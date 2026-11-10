@@ -155,6 +155,91 @@ const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails.p
   await page.click('[data-dev="close"]');
   ok(!(await page.$('.dev-panel')), 'developer view closes');
 
+  // playlists row: three tiles between the chips and the grid, scrolls sideways, placeholders inactive
+  await page.evaluate(() => { location.hash = '#/'; });
+  await page.waitForSelector('.pl-row');
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForTimeout(600);
+  const pl = await page.evaluate(() => {
+    const y = (s) => document.querySelector(s).getBoundingClientRect();
+    const row = document.querySelector('.pl-row');
+    return { n: row.children.length, ord: y('.chips').bottom <= y('.pl-row').top + 1 && y('.pl-row').bottom <= y('.grid').top + 1,
+      snap: getComputedStyle(row).scrollSnapType,
+      titles: [...row.querySelectorAll('.card-title')].map((e) => e.textContent), dis: row.querySelectorAll('[aria-disabled="true"]').length };
+  });
+  ok(pl.n === 3 && pl.titles.join() === 'Shuffle,Playlist 2,Playlist 3' && pl.dis === 2, `three playlist tiles ${pl.titles}`);
+  ok(pl.ord, 'row sits between chips and grid');
+  ok(pl.snap.startsWith('x'), `row snaps horizontally (${pl.snap})`);
+  await shot('12-playlists');
+  await page.click('.pl-card.disabled');
+  ok(!page.url().includes('#/r/'), 'placeholder tile does nothing');
+  const x0 = await page.$eval('.pl-row', (r) => { r.style.paddingRight = '300px'; r.scrollLeft = 120; return r.scrollLeft; });
+  ok(x0 > 0, `row scrolls horizontally (${x0})`);
+  await page.$eval('.pl-row', (r) => { r.style.paddingRight = ''; r.scrollLeft = 0; });
+
+  // shuffle: tile starts a session, right-to-left swipe goes to another random recipe
+  const idOf = () => page.evaluate(() => (location.hash.match(/#\/r\/([\w-]+)/) || [])[1]);
+  const swipe = async (x1, x2, y1, y2, steps = 12) => {
+    const pt = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y }] });
+    await pt('touchStart', x1, y1);
+    for (let i = 1; i <= steps; i++) { await pt('touchMove', x1 + ((x2 - x1) * i) / steps, y1 + ((y2 - y1) * i) / steps); await page.waitForTimeout(16); }
+    await pt('touchEnd');
+  };
+  const total = await page.$$eval('.grid .card', (c) => c.length);
+  await page.click('[data-pl="shuffle"]');
+  await page.waitForSelector('.detail.shuffling');
+  await page.waitForTimeout(900);
+  const seen = [await idOf()];
+  await shot('13-shuffle-start');
+  await swipe(340, 60, 500, 510);
+  await page.waitForTimeout(1200);
+  const second = await idOf();
+  if (total > 1) {
+    ok(second && second !== seen[0], `swipe left goes to another recipe ${seen[0]} -> ${second}`);
+    ok(await page.$('.detail.shuffling'), 'still a shuffle session after the swipe');
+    seen.push(second);
+    for (let i = 0; i < Math.min(total, 6); i++) {
+      await swipe(340, 60, 500, 505);
+      await page.waitForTimeout(1000);
+      const id = await idOf();
+      ok(id !== seen[seen.length - 1], 'no back-to-back repeat');
+      seen.push(id);
+    }
+    await shot('14-shuffle-next');
+    // a vertical drag or a swipe to the right must not change the recipe
+    const before = await idOf();
+    await swipe(200, 200, 600, 300);
+    await swipe(60, 340, 500, 500);
+    await page.waitForTimeout(700);
+    ok((await idOf()) === before, 'vertical drag and swipe right keep the recipe');
+    // Back leaves the session for the library
+    await page.evaluate(() => history.back());
+    await page.waitForSelector('.pl-row');
+    await page.locator('.card').first().click();
+    await page.waitForSelector('.detail');
+    await page.waitForTimeout(700);
+    const plain = await idOf();
+    await swipe(340, 60, 500, 505);
+    await page.waitForTimeout(900);
+    ok((await idOf()) === plain && !(await page.$('.detail.shuffling')), 'no swipe outside a shuffle session');
+  }
+  await page.evaluate(() => { location.hash = '#/'; });
+  await page.waitForSelector('.pl-row');
+
+  // shuffle respects the filter chips
+  const fchip = (await page.$$eval('[data-chip]', (b) => b.map((x) => x.dataset.chip).filter(Boolean)))[0];
+  if (fchip) {
+    await page.click(`[data-chip="${fchip}"]`);
+    const allowed = await page.$$eval('.grid .card', (c) => c.map((x) => x.getAttribute('href').split('/').pop()));
+    await page.click('[data-pl="shuffle"]');
+    await page.waitForSelector('.detail.shuffling');
+    await page.waitForTimeout(700);
+    ok(allowed.includes(await idOf()), `shuffle stays inside the ${fchip} filter`);
+    await page.evaluate(() => history.back());
+    await page.waitForSelector('.pl-row');
+    await page.click('[data-chip=""]');
+  }
+
   // wide screen: developer sidebar next to the recipe
   const wide = await browser.newContext({ viewport: { width: 1280, height: 860 }, colorScheme: 'dark', baseURL: BASE });
   await wide.addInitScript((r) => localStorage.setItem('recipes.auth', JSON.stringify({ access: 'x', refresh: r, exp: 0 })), refresh);
@@ -162,6 +247,7 @@ const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails.p
   wp.on('pageerror', (e) => errors.push(String(e)));
   await wp.goto('/recipes/');
   await wp.waitForSelector('.grid .card');
+  ok((await wp.$$('.pl-row .pl-card')).length === 3, 'playlist row on the wide screen');
   await wp.screenshot({ path: path.join(out, '9-wide-library.png') });
   await wp.locator('.card:has(.badge)').first().click();
   await wp.waitForSelector('.dev-panel #dev-run');

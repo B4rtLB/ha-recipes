@@ -46,6 +46,7 @@ const I = {
   photo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="M21 15l-5-4.5L7 19"/></svg>',
   cart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h2.5l2.2 10.5a1.5 1.5 0 0 0 1.5 1.2h7.9a1.5 1.5 0 0 0 1.5-1.1L20.5 8H6.3"/><circle cx="10" cy="20" r="1.3"/><circle cx="17" cy="20" r="1.3"/></svg>',
   code: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 7L3.5 12l5 5M15.5 7l5 5-5 5"/></svg>',
+  shuffle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h3.5c5 0 6 10 11 10H21M3 17h3.5c1.8 0 3-1 4-2.2M13.5 9.2C14.5 8 15.7 7 17.5 7H21M18.5 4L21.5 7l-3 3M18.5 14l3 3-3 3"/></svg>',
   paste: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="5" y="4.5" width="14" height="16.5" rx="2.5"/><path d="M9 4.5V3h6v1.5"/></svg>',
 };
 
@@ -189,6 +190,7 @@ const state = {
   search: "",
   searching: false,
   current: null,
+  shuffle: null, // {pool, queue, last, busy}: set while a shuffle session runs
   admin: false,
 };
 let pollTimer = null;
@@ -251,6 +253,7 @@ async function render() {
   $("#sheet-root").innerHTML = "";
   ScrollLock.unlock();
   const r = route();
+  if (r.name !== "detail") state.shuffle = null; // leaving to the library ends a shuffle session
   if (r.name === "detail") return renderDetail(r.id);
   return renderLibrary(true);
 }
@@ -337,6 +340,7 @@ async function renderLibrary(fetch_ = true) {
     try { await loadList(); } catch (err) { if (!state.recipes) { app.innerHTML = errorSplash(err); return; } }
   }
   const scroll = window.scrollY;
+  const plX = $(".pl-row")?.scrollLeft || 0;
   const list = visibleRecipes();
   const count = (state.recipes || []).filter((r) => r.status === "ready").length;
   const title = state.tab === "fav" ? "Favourites" : "Recipes";
@@ -351,15 +355,158 @@ async function renderLibrary(fetch_ = true) {
     <h1 class="large-title" id="ltitle">${title}</h1>
     <div class="lib-sub">${count} recipe${count === 1 ? "" : "s"}</div>
     <div class="chips">${chipsHTML()}</div>
+    ${playlistsHTML()}
     ${list.length ? `<div class="section-head"><h2>${esc(filterTitle())}</h2></div>
       <div class="grid">${list.map(cardHTML).join("")}</div>`
       : emptyHTML()}
   </main>
   ${tabbarHTML()}`;
   if (!fetch_) window.scrollTo(0, scroll);
+  if (plX && $(".pl-row")) $(".pl-row").scrollLeft = plX;
   bindLibrary();
   GlassLight.update();
 }
+
+// ------------------------------------------------------------------ playlists
+// A row of tiles between the filter chips and the grid. The first one is a
+// shuffle: it opens a random recipe, and while that session lasts a swipe from
+// right to left on the recipe page moves on to the next random one. The other
+// two are placeholders.
+function shufflePool() {
+  const ready = (r) => r.status === "ready";
+  const filtered = visibleRecipes().filter(ready);
+  return filtered.length ? filtered : (state.recipes || []).filter(ready);
+}
+
+function playlistsHTML() {
+  if (state.searching || !(state.recipes || []).some((r) => r.status === "ready")) return "";
+  const n = shufflePool().length;
+  const sub = `${n} recipe${n === 1 ? "" : "s"}${state.filters.size && visibleRecipes().some((r) => r.status === "ready") ? " · filtered" : ""}`;
+  return `<div class="section-head"><h2>Playlists</h2></div>
+  <div class="pl-row" role="list">
+    <button class="pl-card" role="listitem" data-pl="shuffle" aria-label="Shuffle, ${esc(sub)}">
+      <div class="art pl-art pl-shuffle">${I.shuffle}</div>
+      <div class="card-title">Shuffle</div><div class="card-sub">${esc(sub)}</div></button>
+    <div class="pl-card disabled" role="listitem" aria-disabled="true">
+      <div class="art pl-art pl-soon-a"><span>${I.plus}</span></div>
+      <div class="card-title">Playlist 2</div><div class="card-sub">Coming soon</div></div>
+    <div class="pl-card disabled" role="listitem" aria-disabled="true">
+      <div class="art pl-art pl-soon-b"><span>${I.plus}</span></div>
+      <div class="card-title">Playlist 3</div><div class="card-sub">Coming soon</div></div>
+  </div>`;
+}
+
+// The queue is a shuffled "bag": every recipe once before any repeats, and a
+// new bag never starts with the recipe that just ended the old one.
+function shuffleBag(ids, last) {
+  const a = ids.slice();
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  if (a.length > 1 && a[0] === last) [a[0], a[1]] = [a[1], a[0]];
+  return a;
+}
+
+function nextShuffleId() {
+  const sh = state.shuffle;
+  if (!sh) return null;
+  const alive = new Set((state.recipes || []).filter((r) => r.status === "ready").map((r) => r.id));
+  if (!sh.queue.length) sh.queue = shuffleBag([...sh.pool].filter((id) => alive.has(id)), sh.last);
+  let id;
+  while ((id = sh.queue.shift()) && !alive.has(id)) { /* deleted meanwhile */ }
+  if (!id && sh.queue.length === 0) return null;
+  return id;
+}
+
+function startShuffle() {
+  const pool = shufflePool().map((r) => r.id);
+  if (!pool.length) { toast("Nothing to shuffle yet"); return; }
+  state.shuffle = { pool, queue: [], last: null, busy: false, hinted: false };
+  const id = nextShuffleId();
+  state.shuffle.last = id;
+  location.hash = "#/r/" + id;
+}
+
+const SWIPE_FREE = "> :not(.nav-bar):not(.nav-float)"; // fixed children must not sit inside a transform
+
+async function shuffleNext() {
+  const sh = state.shuffle, det = $(".detail");
+  if (!sh || sh.busy || !det) return;
+  const id = nextShuffleId();
+  if (!id) return;
+  if (sh.pool.length < 2 || id === sh.last) { toast("That's the only recipe in this shuffle"); swipeReset(det); return; }
+  sh.busy = true;
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const parts = [...det.children].filter((c) => !c.matches(".nav-bar, .nav-float"));
+  const fetched = api("/" + id).catch((err) => { toast(err.message); return null; });
+  if (!reduce) {
+    parts.forEach((c) => { c.style.transition = "transform 0.22s var(--ease), opacity 0.22s var(--ease)"; c.style.transform = "translateX(-60vw)"; c.style.opacity = "0"; });
+    await new Promise((res) => setTimeout(res, 230));
+  }
+  const r = await fetched;
+  if (!r || route().name !== "detail" || !state.shuffle) { sh.busy = false; parts.forEach((c) => { c.style.transform = c.style.opacity = c.style.transition = ""; }); return; }
+  sh.last = id;
+  history.replaceState(null, "", "#/r/" + id); // Back goes to the library, not through the shuffle
+  cleanupDetail();
+  $("#sheet-root").innerHTML = "";
+  await renderDetail(id, { slide: true, data: r });
+  sh.busy = false;
+}
+
+function swipeReset(det) {
+  [...det.children].filter((c) => !c.matches(".nav-bar, .nav-float")).forEach((c) => { c.style.transition = "transform 0.3s var(--spring)"; c.style.transform = ""; });
+  setTimeout(() => [...det.children].forEach((c) => { c.style.transition = ""; }), 320);
+}
+
+// Right-to-left swipe while a shuffle session runs. Only a clearly horizontal
+// move counts, so vertical scrolling, the hero pull-down and the video scrub
+// bar keep working; the page follows the finger a little as feedback.
+function setupShuffleSwipe() {
+  if (!state.shuffle) return;
+  const det = $(".detail");
+  det.classList.add("shuffling");
+  let x0 = null, y0 = 0, t0 = 0, mode = "";
+  const free = () => [...det.children].filter((c) => !c.matches(".nav-bar, .nav-float"));
+  const onStart = (e) => {
+    mode = "";
+    x0 = e.touches.length === 1 && !state.shuffle?.busy && !ScrollLock.on && !hasHorizontalScroller(e.target) ? e.touches[0].clientX : null;
+    y0 = e.touches[0].clientY; t0 = Date.now();
+  };
+  const onMove = (e) => {
+    if (x0 == null || mode === "v") return;
+    const dx = e.touches[0].clientX - x0, dy = e.touches[0].clientY - y0;
+    if (!mode) {
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+      mode = Math.abs(dx) > Math.abs(dy) * 1.6 ? "h" : "v";
+      if (mode === "v") return;
+    }
+    if (e.cancelable) e.preventDefault();
+    Swipe.horizontal = true;
+    const px = Math.min(0, dx) * 0.55 + Math.max(0, dx) * 0.12;
+    free().forEach((c) => { c.style.transition = "none"; c.style.transform = `translateX(${px}px)`; c.style.opacity = String(1 - Math.min(0.5, Math.abs(px) / 320)); });
+  };
+  const onEnd = (e) => {
+    const wasH = mode === "h";
+    const dx = (e.changedTouches?.[0]?.clientX ?? x0) - (x0 ?? 0);
+    const fast = dx < -40 && Date.now() - t0 < 260;
+    x0 = null; mode = ""; Swipe.horizontal = false;
+    if (!wasH) return;
+    free().forEach((c) => { c.style.opacity = ""; });
+    if (dx < -90 || fast) shuffleNext(); else swipeReset(det);
+  };
+  const onKey = (e) => { if (e.key === "ArrowRight" && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName || "")) shuffleNext(); };
+  document.addEventListener("touchstart", onStart, { passive: true });
+  document.addEventListener("touchmove", onMove, { passive: false });
+  document.addEventListener("touchend", onEnd);
+  document.addEventListener("touchcancel", onEnd);
+  document.addEventListener("keydown", onKey);
+  detailCleanup.push(() => {
+    document.removeEventListener("touchstart", onStart); document.removeEventListener("touchmove", onMove);
+    document.removeEventListener("touchend", onEnd); document.removeEventListener("touchcancel", onEnd);
+    document.removeEventListener("keydown", onKey);
+  });
+  if (!state.shuffle.hinted) { state.shuffle.hinted = true; toast("Swipe left for another recipe", 3200); }
+}
+const Swipe = { horizontal: false };
+const hasHorizontalScroller = (el) => !!el.closest(".scrub, .sheet, .dev-panel, .timers, .stepper");
 
 function emptyHTML() {
   if ((state.recipes || []).length === 0) {
@@ -407,6 +554,7 @@ function bindLibrary() {
     renderLibrary(false);
     $(".chips").scrollLeft = x;
   });
+  $('[data-pl="shuffle"]')?.addEventListener("click", startShuffle);
   $$("[data-tab]").forEach((b) => b.onclick = () => { state.tab = b.dataset.tab; window.scrollTo(0, 0); renderLibrary(false); });
   $('[data-act="add"]').onclick = openAddSheet;
   $('[data-act="settings"]').onclick = openSettingsSheet;
@@ -434,7 +582,7 @@ function errorSplash(err) {
 let detailCleanup = [];
 function cleanupDetail() { detailCleanup.forEach((f) => f()); detailCleanup = []; Dev.close(); }
 
-async function renderDetail(id) {
+async function renderDetail(id, opts = {}) {
   const app = $("#app");
   const cached = (state.recipes || []).find((r) => r.id === id);
   if (cached && !app.querySelector(".detail")) {
@@ -442,13 +590,15 @@ async function renderDetail(id) {
       <div class="head"><h1 class="title">${esc(cached.title || "")}</h1></div></div>`;
   }
   let r;
-  try { r = await api("/" + id); }
+  try { r = opts.data || await api("/" + id); }
   catch (err) { app.innerHTML = errorSplash(err); return; }
   if (route().id !== id) return;
   state.current = r;
   window.scrollTo(0, 0);
   app.innerHTML = detailHTML(r);
+  if (opts.slide) { const d = $(".detail"); d.classList.remove("page"); d.classList.add("slide-in"); }
   bindDetail(r);
+  setupShuffleSwipe();
   // Wide screens: the developer sidebar sits next to the recipe (admins, until closed).
   if (Dev.el) Dev.open(r);
   else adminReady.then(() => { if (state.admin && Dev.wide() && store.get("dev", true) && route().id === id) Dev.open(r); });
@@ -799,7 +949,7 @@ function setupVideo() {
     pull = 0;
   };
   const onMove = (e) => {
-    if (startY == null) return;
+    if (startY == null || Swipe.horizontal) return;
     const dy = e.touches[0].clientY - startY;
     if (dy <= 0 || window.scrollY > 0) {
       if (pull) { pull = 0; hideHint(); animateTo(startH, () => { if (!isTall()) hero.style.height = ""; }); }

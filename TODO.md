@@ -1,14 +1,6 @@
 # Backlog
 
-Nothing planned right now. The previous list (top buttons, sheets, readable media folders, integration settings in the app, developer view) is done; see `CLAUDE.md` for how each works.
-
-## Check on the real iPhone
-
-These were only tested in an emulated iPhone (Chromium), not in the installed app on iOS:
-
-- Sheets: the page behind an open sheet stays still, and the scroll position is back after closing (`ScrollLock` in `app.js`).
-- Sheets run to the bottom edge, also with the home indicator.
-- Developer view full screen (••• → Developer), and as a sidebar on the iPad/Mac.
+Nothing planned right now. The previous list (top buttons, sheets, readable media folders, integration settings in the app, developer view) is done and checked on the real iPhone; see `CLAUDE.md` for how each works.
 
 ## Try lean mode on a real small model
 
