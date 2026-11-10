@@ -24,7 +24,9 @@ it as a single JSON object. Output JSON only: no markdown, no code fences, no co
 CRITICAL RULES
 - No hallucination: use only information found in the source. Never add or invent \
 ingredients or steps. When a caption and a transcript are both given, combine them: \
-amounts written in the caption win, the transcript fills in what the caption lacks.
+amounts written in the caption win, the transcript fills in what the caption lacks. \
+"RECIPE TEXT" is the user's own saved note: combine it with the caption, the note wins on \
+amounts, the caption fills in missing steps.
 - Write all human-readable text in {language}. Translate if the source is in another \
 language. Keep it natural and concise.
 - Metric only: convert cups, oz, lb, fl oz, inches and °F to g, kg, ml, l, cm and °C. \
@@ -251,6 +253,10 @@ def normalize(data: dict[str, Any]) -> dict[str, Any]:
     prep, cook, total = minutes("prep_min"), minutes("cook_min"), minutes("total_min")
     if total is None and (prep or cook):
         total = (prep or 0) + (cook or 0)
+
+    # Keep the "Quick" tag honest (<= 30 minutes in total).
+    if total and total > 30 and "Quick" in tags:
+        tags.remove("Quick")
 
     servings = _num(data.get("servings"))
     return {

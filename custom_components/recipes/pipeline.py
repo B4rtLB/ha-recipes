@@ -83,7 +83,7 @@ class RecipeProcessor:
                 _LOGGER.exception("Processing recipe %s failed", recipe_id)
                 if recipe_id in self.store.recipes:
                     self.store.async_update(
-                        recipe_id, {"status": STATUS_ERROR, "error": str(err) or type(err).__name__}
+                        recipe_id, {"status": STATUS_ERROR, "error": friendly_error(err), "progress": None}
                     )
                     await self._notify(recipe_id, failed=True)
 
@@ -139,14 +139,17 @@ class RecipeProcessor:
                 source["url_canonical"] = social["canonical_url"]
             if social.get("author"):
                 source["author"] = social["author"]
-            if social.get("text") and not recipe.get("input_text"):
+            if social.get("text"):
+                # Also for imported notes: the original caption often has the full recipe.
                 material.append("SOCIAL MEDIA CAPTION:\n" + social["text"])
             caption_len = len(social.get("text") or "")
+            have_text = _looks_like_recipe(social.get("text", "")) or _looks_like_recipe(
+                recipe.get("input_text") or ""
+            )
             if (
                 media.get("video")
                 and self.options.get(CONF_TRANSCRIBE, True)
-                and not recipe.get("input_text")
-                and (caption_len < CAPTION_IS_ENOUGH or not _looks_like_recipe(social.get("text", "")))
+                and (caption_len < CAPTION_IS_ENOUGH or not have_text)
             ):
                 self._set(recipe_id, progress="Listening to video")
                 transcript = await self._transcribe(folder / media["video"], social.get("text", ""))
@@ -383,6 +386,19 @@ class RecipeProcessor:
             )
         except Exception as err:  # never fail a recipe on a notification
             _LOGGER.debug("Notification failed: %s", err)
+
+
+def friendly_error(err: Exception) -> str:
+    """Short, human error message for the app."""
+    if isinstance(err, aiohttp.ClientResponseError):
+        if err.status == 404:
+            return "This page doesn't exist (404). Check the link."
+        if err.status in (401, 403):
+            return f"The website blocked the request ({err.status})."
+        return f"The website returned an error ({err.status})."
+    if isinstance(err, (aiohttp.ClientError, TimeoutError)):
+        return "Couldn't reach the website. Try again later."
+    return str(err) or type(err).__name__
 
 
 def _looks_like_recipe(text: str) -> bool:

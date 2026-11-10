@@ -58,6 +58,26 @@
           "description": "How many recipes to return."
         }
       }
+    },
+    "delete": {
+      "name": "Delete recipe",
+      "description": "Delete a recipe and its media.",
+      "fields": {
+        "id": {
+          "name": "ID",
+          "description": "Recipe ID."
+        }
+      }
+    },
+    "retry": {
+      "name": "Retry",
+      "description": "Process a recipe again; without an ID all failed recipes are retried.",
+      "fields": {
+        "id": {
+          "name": "ID",
+          "description": "Recipe ID (optional)."
+        }
+      }
     }
   }
 }

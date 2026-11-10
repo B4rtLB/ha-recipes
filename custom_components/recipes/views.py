@@ -63,6 +63,8 @@ def serialize(hass: HomeAssistant, recipe: dict[str, Any], *, full: bool) -> dic
     out: dict[str, Any]
     if full:
         out = {k: v for k, v in recipe.items() if k not in ("input_text", "upload")}
+        if recipe.get("status") == "error" and recipe.get("input_text"):
+            out["original_text"] = recipe["input_text"][:5000]
     else:
         out = {k: recipe.get(k) for k in SUMMARY_KEYS}
         out["platform"] = (recipe.get("source") or {}).get("platform")

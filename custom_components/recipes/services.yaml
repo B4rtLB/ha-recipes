@@ -19,3 +19,15 @@ status:
         number:
           min: 1
           max: 500
+delete:
+  fields:
+    id:
+      required: true
+      selector:
+        text:
+retry:
+  fields:
+    id:
+      required: false
+      selector:
+        text:

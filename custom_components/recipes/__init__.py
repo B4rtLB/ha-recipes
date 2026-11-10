@@ -92,6 +92,26 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             ],
         }
 
+    async def delete(call: ServiceCall) -> None:
+        data: RecipesData | None = hass.data.get(DOMAIN)
+        if data is None:
+            raise vol.Invalid("Recipes is not set up")
+        await data.store.async_delete(call.data["id"])
+
+    async def retry(call: ServiceCall) -> None:
+        data: RecipesData | None = hass.data.get(DOMAIN)
+        if data is None:
+            raise vol.Invalid("Recipes is not set up")
+        ids = [call.data["id"]] if call.data.get("id") else [
+            r["id"] for r in data.store.recipes.values() if r.get("status") == "error"
+        ]
+        for rid in ids:
+            if rid in data.store.recipes:
+                data.processor.enqueue(rid)
+
+    hass.services.async_register(DOMAIN, "delete", delete, schema=vol.Schema({vol.Required("id"): cv.string}))
+    hass.services.async_register(DOMAIN, "retry", retry, schema=vol.Schema({vol.Optional("id"): cv.string}))
+
     hass.services.async_register(
         DOMAIN,
         "status",

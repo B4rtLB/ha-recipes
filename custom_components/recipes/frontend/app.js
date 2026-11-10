@@ -465,7 +465,8 @@ function detailHTML(r) {
   const eyebrow = r.tags && r.tags.length ? r.tags.slice(0, 3).join(" · ") : PLATFORM[(r.source || {}).platform] || "";
   const errorPanel = r.status === "error" ? `<div class="error-panel"><h3>Couldn't read this recipe</h3><p>${esc(r.error || "Unknown error")}</p>
       <div class="row"><button class="btn plain press" data-act="retry">${I.retry}Try again</button>
-      <button class="btn danger press" data-act="delete">${I.trash}Delete</button></div></div>` : "";
+      <button class="btn danger press" data-act="delete">${I.trash}Delete</button></div>
+      ${r.original_text ? `<div class="notes-box" style="white-space:pre-wrap;margin-top:16px"><b>Your original note</b>${esc(r.original_text)}</div>` : ""}</div>` : "";
   const busyPanel = busy ? `<div class="error-panel"><h3 style="display:flex;gap:10px;align-items:center"><span class="spinner"></span>${esc(r.progress || "Waiting in line")}</h3>
       <p>This usually takes 20–60 seconds. You can leave this page.</p></div>` : "";
   const cookOn = store.get("wake", true);
