@@ -10,3 +10,12 @@ add:
       default: false
       selector:
         boolean:
+status:
+  fields:
+    limit:
+      required: false
+      default: 20
+      selector:
+        number:
+          min: 1
+          max: 500

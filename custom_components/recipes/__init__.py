@@ -65,6 +65,41 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             data.processor.enqueue(recipe["id"])
         return {"id": recipe["id"], "created": created}
 
+    async def status(call: ServiceCall) -> ServiceResponse:
+        data: RecipesData | None = hass.data.get(DOMAIN)
+        if data is None:
+            raise vol.Invalid("Recipes is not set up")
+        recipes = sorted(data.store.recipes.values(), key=lambda r: r.get("created") or "", reverse=True)
+        return {
+            "webhook_path": f"/api/webhook/{data.entry.data[CONF_WEBHOOK_ID]}",
+            "count": len(recipes),
+            "recipes": [
+                {
+                    "id": r["id"],
+                    "title": r.get("title"),
+                    "status": r.get("status"),
+                    "progress": r.get("progress"),
+                    "error": r.get("error"),
+                    "platform": (r.get("source") or {}).get("platform"),
+                    "has_video": bool((r.get("media") or {}).get("video")),
+                    "ingredients": sum(len(g.get("items", [])) for g in r.get("ingredient_groups") or []),
+                    "steps": len(r.get("steps") or []),
+                    "total_min": r.get("total_min"),
+                    "tags": r.get("tags"),
+                    "notes": r.get("pipeline_notes"),
+                }
+                for r in recipes[: call.data.get("limit", 20)]
+            ],
+        }
+
+    hass.services.async_register(
+        DOMAIN,
+        "status",
+        status,
+        schema=vol.Schema({vol.Optional("limit", default=20): vol.All(int, vol.Range(min=1, max=500))}),
+        supports_response=SupportsResponse.ONLY,
+    )
+
     hass.services.async_register(
         DOMAIN,
         "add",

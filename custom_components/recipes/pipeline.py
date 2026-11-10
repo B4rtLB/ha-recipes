@@ -361,9 +361,9 @@ class RecipeProcessor:
 
     async def _notify(self, recipe_id: str, failed: bool = False) -> None:
         service = (self.options.get(CONF_NOTIFY_SERVICE) or "").strip()
-        if not service:
-            return
         recipe = self.store.recipes.get(recipe_id) or {}
+        if not service or recipe.get("imported_from"):
+            return  # no notification storm during a bulk import
         domain, _, name = service.partition(".")
         if not name:
             domain, name = "notify", domain

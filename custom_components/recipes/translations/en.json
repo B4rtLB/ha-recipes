@@ -48,6 +48,16 @@
           "description": "Save again even if this link was saved before."
         }
       }
+    },
+    "status": {
+      "name": "Status",
+      "description": "List recent recipes and their processing status.",
+      "fields": {
+        "limit": {
+          "name": "Limit",
+          "description": "How many recipes to return."
+        }
+      }
     }
   }
 }
