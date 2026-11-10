@@ -114,11 +114,13 @@ You may translate the words to {language}. Use one group with "name": null unles
 - "tags": at most one tag per group, exactly as written, skip a group when unsure:
 {tags}
   Quick = ready in 30 minutes or less. Protein: tag the main meat or fish (bacon and ham are Pork).
-- Times and servings from the source, otherwise null.
+- Times and servings: use the source. If they are missing you may estimate prep/cook/total \
+minutes and servings from cues (oven time, pan size, "serves 4") and then set "estimated": true. \
+Never invent ingredients or steps.
 
 JSON SHAPE
 {{"recipe_found": true, "title": "...", "description": "one short sentence or null", "servings": 4, \
-"servings_text": null, "prep_min": null, "cook_min": null, "total_min": null, \
+"servings_text": null, "prep_min": null, "cook_min": null, "total_min": null, "estimated": false, \
 "ingredient_groups": [{{"name": null, "items": ["200 g chicken thigh, diced", "1 tsp salt"]}}], \
 "steps": ["Fry the chicken for 5 minutes.", "Add the sauce."], "tags": ["Main", "Chicken"], "source_notes": null}}
 
