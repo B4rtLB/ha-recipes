@@ -19,6 +19,7 @@ from homeassistant.exceptions import HomeAssistantError
 
 from .const import (
     CONF_AI_TASK_ENTITY,
+    CONF_AUTO_DISCOUNTS,
     CONF_EXTRACTION_MODE,
     CONF_LANGUAGE,
     CONF_NOTIFY_SERVICE,
@@ -446,6 +447,7 @@ def _options_payload(hass: HomeAssistant, options: dict[str, Any]) -> dict[str, 
             CONF_LANGUAGE: options.get(CONF_LANGUAGE, DEFAULT_LANGUAGE),
             CONF_EXTRACTION_MODE: options.get(CONF_EXTRACTION_MODE, DEFAULT_EXTRACTION_MODE),
             CONF_TRANSCRIBE: bool(options.get(CONF_TRANSCRIBE, True)),
+            CONF_AUTO_DISCOUNTS: bool(options.get(CONF_AUTO_DISCOUNTS, True)),
             CONF_TODO_ENTITY: options.get(CONF_TODO_ENTITY) or None,
             CONF_NOTIFY_SERVICE: options.get(CONF_NOTIFY_SERVICE) or None,
         },
@@ -478,9 +480,9 @@ def _validate_options(hass: HomeAssistant, current: dict[str, Any], changes: Any
         elif key == CONF_EXTRACTION_MODE:
             if value not in EXTRACTION_MODES:
                 raise ValueError(f"Unknown extraction mode: {value}")
-        elif key == CONF_TRANSCRIBE:
+        elif key in (CONF_TRANSCRIBE, CONF_AUTO_DISCOUNTS):
             if not isinstance(value, bool):
-                raise ValueError("transcribe must be true or false")
+                raise ValueError(f"{key} must be true or false")
         elif key == CONF_NOTIFY_SERVICE:
             if value and not (isinstance(value, str) and re.fullmatch(r"[a-z_]+\.[a-z0-9_]+", value)):
                 raise ValueError(f"Not a notify entity or service: {value}")

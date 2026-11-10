@@ -1,0 +1,203 @@
+{
+ "kind": "add-terms",
+ "cases": [
+  {
+   "name": "AI answers, word list rescues, ready-made dropped",
+   "input": {
+    "offers": [
+     "AH Scharrel kipfilet 400 g",
+     "Hollandse Conference peren",
+     "Toffee muffin",
+     "Mosselen",
+     "AH Ovenschotel scharrel kipfilet Koreaans",
+     "Paturain"
+    ],
+    "ai": {
+     "AH Scharrel kipfilet 400 g": [],
+     "Hollandse Conference peren": [],
+     "Toffee muffin": [
+      "muffin"
+     ],
+     "Mosselen": [
+      "mosselen",
+      "mussels"
+     ],
+     "AH Ovenschotel scharrel kipfilet Koreaans": [
+      "kipfilet",
+      "chicken breast"
+     ],
+     "Paturain": []
+    }
+   },
+   "expected": {
+    "kept": {
+     "AH Scharrel kipfilet 400 g": [
+      "kipfilet",
+      "chicken breast",
+      "chicken fillet"
+     ],
+     "Hollandse Conference peren": [
+      "peren",
+      "pear"
+     ],
+     "Toffee muffin": [
+      "muffin"
+     ],
+     "Mosselen": [
+      "mosselen",
+      "mussels"
+     ]
+    },
+    "stats": {
+     "ai_calls": 1,
+     "from_ai": 6,
+     "from_dictionary": 0,
+     "dropped": 2
+    },
+    "asked": 1,
+    "cache": [
+     "hollandse conference peren",
+     "kipfilet",
+     "mosselen",
+     "ovenschotel kipfilet koreaans",
+     "paturain",
+     "toffee muffin"
+    ]
+   }
+  },
+  {
+   "name": "no AI: word list only",
+   "input": {
+    "offers": [
+     "AH Scharrel kipfilet 400 g",
+     "Hollandse Conference peren",
+     "Toffee muffin",
+     "Mosselen",
+     "AH Ovenschotel scharrel kipfilet Koreaans",
+     "Paturain"
+    ],
+    "ai": {},
+    "no_ai": true
+   },
+   "expected": {
+    "kept": {
+     "AH Scharrel kipfilet 400 g": [
+      "kipfilet",
+      "chicken breast",
+      "chicken fillet"
+     ],
+     "Hollandse Conference peren": [
+      "peren",
+      "pear"
+     ],
+     "Toffee muffin": [
+      "toffee muffin"
+     ],
+     "Mosselen": [
+      "mosselen"
+     ],
+     "Paturain": [
+      "paturain"
+     ]
+    },
+    "stats": {
+     "ai_calls": 0,
+     "from_ai": 0,
+     "from_dictionary": 5,
+     "dropped": 1
+    },
+    "asked": 0,
+    "cache": []
+   }
+  },
+  {
+   "name": "AI down: word list only",
+   "input": {
+    "offers": [
+     "AH Scharrel kipfilet 400 g",
+     "Hollandse Conference peren",
+     "Toffee muffin",
+     "Mosselen",
+     "AH Ovenschotel scharrel kipfilet Koreaans",
+     "Paturain"
+    ],
+    "ai": {},
+    "broken": true
+   },
+   "expected": {
+    "kept": {
+     "AH Scharrel kipfilet 400 g": [
+      "kipfilet",
+      "chicken breast",
+      "chicken fillet"
+     ],
+     "Hollandse Conference peren": [
+      "peren",
+      "pear"
+     ],
+     "Toffee muffin": [
+      "toffee muffin"
+     ],
+     "Mosselen": [
+      "mosselen"
+     ],
+     "Paturain": [
+      "paturain"
+     ]
+    },
+    "stats": {
+     "ai_calls": 0,
+     "from_ai": 0,
+     "from_dictionary": 5,
+     "dropped": 1,
+     "errors": 1
+    },
+    "asked": 1,
+    "cache": []
+   }
+  },
+  {
+   "name": "known names are not asked again",
+   "input": {
+    "offers": [
+     "Mosselen",
+     "Broccoli"
+    ],
+    "ai": {
+     "Broccoli": [
+      "broccoli",
+      "broccoli"
+     ]
+    },
+    "cache": {
+     "mosselen": [
+      "mosselen",
+      "mussels"
+     ]
+    }
+   },
+   "expected": {
+    "kept": {
+     "Mosselen": [
+      "mosselen",
+      "mussels"
+     ],
+     "Broccoli": [
+      "broccoli"
+     ]
+    },
+    "stats": {
+     "ai_calls": 1,
+     "from_ai": 1,
+     "from_dictionary": 0,
+     "dropped": 0
+    },
+    "asked": 1,
+    "cache": [
+     "broccoli",
+     "mosselen"
+    ]
+   }
+  }
+ ]
+}

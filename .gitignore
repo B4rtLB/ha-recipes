@@ -11,3 +11,4 @@ dev/shots/
 dev/fixtures/*.mp4
 dev/fixtures/dish.jpg
 dev/.venv
+dev/fixtures/offers/

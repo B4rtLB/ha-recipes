@@ -45,6 +45,69 @@ def jsonld_case(recipe):
     }
 
 
+def _package():
+    sys.path.insert(0, str(ROOT.parent.parent))
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+    from custom_components.recipes import offer_terms, offers  # noqa: PLC0415
+    import offer_fixtures  # noqa: PLC0415
+
+    return offers, offer_terms, offer_fixtures
+
+
+def offers_case(value):
+    """A store's invented page through its parser: the food offers that are still running."""
+    offers, _, fixtures = _package()
+    today = value["today"]
+    if value["store"] == "ah":
+        raw = offers.parse_ah_products(json.loads(fixtures.ah(today)[1])["products"], today)
+    else:
+        raw = {"jumbo": offers.parse_jumbo, "dirk": offers.parse_dirk, "lidl": offers.parse_lidl}[value["store"]](
+            fixtures.pages(today)[value["store"] + ".html"]
+        )
+    done = offers.finish(raw, today)
+    return {
+        "found": len(raw),
+        "running": len(done),
+        "food": [
+            [o["name"], o["pack"], o["price"], o["was"], o["note"], o["valid_from"], o["valid_to"], o["category"]]
+            for o in done if offers.is_food_category(o["category"])
+        ],
+    }
+
+
+def terms_case(value):
+    """Search words for product names from the built-in word list, or the parse of an AI reply."""
+    _, terms, _ = _package()
+    if "reply" in value:
+        try:
+            return {str(k): v for k, v in terms.parse_terms_reply(value["reply"], value["size"]).items()}
+        except ValueError as err:
+            return {"error": str(err)}
+    return {name: terms.dictionary_terms(name) for name in value["names"]}
+
+
+def add_terms_case(value):
+    """add_terms with a scripted AI: which offers keep which terms, and how the work was split."""
+    import asyncio  # noqa: PLC0415
+
+    _, terms, _ = _package()
+    offers = [{"name": n} for n in value["offers"]]
+    calls = []
+
+    async def ai_call(prompt):
+        calls.append(prompt)
+        lines = prompt.split("OFFERS (number | name | pack | category)\n", 1)[1].splitlines()
+        items = [{"i": int(l.split("|")[0]), "terms": value["ai"].get(l.split("|")[1], [])} for l in lines]
+        if value.get("broken"):
+            raise ValueError("AI is down")
+        return json.dumps({"items": items})
+
+    cache = dict(value.get("cache", {}))
+    stats = asyncio.run(terms.add_terms(offers, None if value.get("no_ai") else ai_call, cache))
+    return {"kept": {o["name"]: o["terms"] for o in offers}, "stats": {k: v for k, v in stats.items() if k != "last_error"},
+            "asked": len(calls), "cache": sorted(cache)}
+
+
 def run(kind, case):
     value = case["input"]
     if kind == "ingredient":
@@ -66,6 +129,12 @@ def run(kind, case):
             return {"error": str(err)}
     if kind == "jsonld":
         return jsonld_case(value)
+    if kind == "offers":
+        return offers_case(value)
+    if kind == "terms":
+        return terms_case(value)
+    if kind == "add-terms":
+        return add_terms_case(value)
     raise SystemExit(f"unknown kind {kind}")
 
 

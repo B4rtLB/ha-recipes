@@ -15,10 +15,12 @@ from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, Supp
 import voluptuous as vol
 
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.event import async_call_later, async_track_time_change
 
 from . import discounts, sources
-from .const import CONF_WEBHOOK_ID, DOMAIN, URL_STATIC
+from .const import CONF_AUTO_DISCOUNTS, CONF_WEBHOOK_ID, DOMAIN, URL_STATIC
 from .pipeline import RecipeProcessor, new_recipe_from_payload
+from .refresh import refresh_discounts
 from .store import RecipeStore
 from .views import FRONTEND, handle_webhook, register_views
 
@@ -152,6 +154,28 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             vol.Required("items"): list,
         }),
     )
+    async def refresh_offers(call: ServiceCall) -> ServiceResponse:
+        data: RecipesData | None = hass.data.get(DOMAIN)
+        if data is None:
+            raise vol.Invalid("Recipes is not set up")
+        try:
+            return await refresh_discounts(
+                hass, data, call.data.get("store"), force=call.data["force"], test_base=call.data.get("test_base")
+            )
+        except ValueError as err:
+            raise ServiceValidationError(str(err)) from err
+
+    hass.services.async_register(
+        DOMAIN,
+        "refresh_discounts",
+        refresh_offers,
+        schema=vol.Schema({
+            vol.Optional("store"): vol.All(cv.ensure_list, [vol.In(list(discounts.STORES))]),
+            vol.Optional("force", default=False): cv.boolean,
+            vol.Optional("test_base"): cv.string,
+        }),
+        supports_response=SupportsResponse.OPTIONAL,
+    )
     hass.services.async_register(DOMAIN, "delete", delete, schema=vol.Schema({vol.Required("id"): cv.string}))
     hass.services.async_register(DOMAIN, "retry", retry, schema=vol.Schema({vol.Optional("id"): cv.string}))
 
@@ -190,6 +214,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     processor.start()
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+
+    async def auto_refresh(_now=None) -> None:
+        """Fetch the weekly offers of the shops whose list is missing, ended or old (see refresh.py)."""
+        current: RecipesData | None = hass.data.get(DOMAIN)
+        if current and current.processor.options.get(CONF_AUTO_DISCOUNTS, True):
+            try:
+                await refresh_discounts(hass, current)
+            except Exception:  # noqa: BLE001 - never let the schedule die
+                _LOGGER.exception("Automatic offers refresh failed")
+
+    entry.async_on_unload(async_track_time_change(hass, auto_refresh, hour=6, minute=15, second=0))
+    entry.async_on_unload(async_call_later(hass, 180, auto_refresh))
     return True
 
 

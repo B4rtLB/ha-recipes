@@ -1,0 +1,106 @@
+{
+ "kind": "terms",
+ "cases": [
+  {
+   "name": "word list",
+   "input": {
+    "names": [
+     "AH Scharrel kipfilet 400 g",
+     "Biologische eieren",
+     "Hellmann's of Calvé mayonaise",
+     "Alle Jumbo wokgroenten zak à 400 gram of Jumbo's woksauzen",
+     "AH Rundergehakt",
+     "Zalmfilet 2 stuks",
+     "Jumbo's Dolce Gusto",
+     "Currypasta rood",
+     "Spaghetti",
+     "Zoete aardappelen",
+     "Verse pasta spaghetti",
+     "Beemster",
+     "Kippendijfilet",
+     "AH Ovenschotel scharrel kipfilet Koreaans",
+     "Alle Jumbo gekoelde maaltijdpakketten",
+     "AH Gegrilde halve kip sweet chili"
+    ]
+   },
+   "expected": {
+    "AH Scharrel kipfilet 400 g": [
+     "kipfilet",
+     "chicken breast",
+     "chicken fillet"
+    ],
+    "Biologische eieren": [
+     "eieren",
+     "egg"
+    ],
+    "Hellmann's of Calvé mayonaise": [
+     "mayonaise",
+     "mayonnaise"
+    ],
+    "Alle Jumbo wokgroenten zak à 400 gram of Jumbo's woksauzen": [
+     "wokgroenten",
+     "stir fry vegetables",
+     "mixed vegetables"
+    ],
+    "AH Rundergehakt": [
+     "rundergehakt",
+     "ground beef",
+     "minced beef",
+     "beef mince"
+    ],
+    "Zalmfilet 2 stuks": [
+     "zalmfilet",
+     "salmon"
+    ],
+    "Jumbo's Dolce Gusto": [],
+    "Currypasta rood": [
+     "currypasta",
+     "curry paste"
+    ],
+    "Spaghetti": [
+     "spaghetti"
+    ],
+    "Zoete aardappelen": [
+     "zoete aardappelen",
+     "sweet potato"
+    ],
+    "Verse pasta spaghetti": [
+     "spaghetti",
+     "pasta"
+    ],
+    "Beemster": [],
+    "Kippendijfilet": [
+     "kippendijfilet",
+     "chicken thigh"
+    ],
+    "AH Ovenschotel scharrel kipfilet Koreaans": [],
+    "Alle Jumbo gekoelde maaltijdpakketten": [],
+    "AH Gegrilde halve kip sweet chili": []
+   }
+  },
+  {
+   "name": "ai reply",
+   "input": {
+    "reply": "```json\n{\"items\": [{\"i\": 0, \"terms\": [\"Kipfilet\", \"Chicken Breast\"]}, {\"i\": 1, \"terms\": []}, {\"i\": 7, \"terms\": [\"x\"]}, {\"i\": \"2\", \"terms\": [\"y\"]}]}\n```",
+    "size": 3
+   },
+   "expected": {
+    "0": [
+     "kipfilet",
+     "chicken breast"
+    ],
+    "1": []
+   }
+  },
+  {
+   "name": "ai reply without json",
+   "input": {
+    "reply": "Sorry, I cannot help",
+    "size": 2
+   },
+   "expected": {
+    "error": "no JSON in the reply"
+   }
+  }
+ ]
+}

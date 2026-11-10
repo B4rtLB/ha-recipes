@@ -1266,7 +1266,9 @@ async function openSettingsSheet() {
       ${select("stt_entity", "Speech-to-text", "Automatic")}
       <div class="sub-h">Shopping and notifications</div>
       ${select("todo_entity", "To-do list for shopping", "Automatic")}
-      ${select("notify_service", "Notify when a recipe is saved", "No notification")}` : ""}
+      ${select("notify_service", "Notify when a recipe is saved", "No notification")}
+      <label class="opt row"><span>Weekly supermarket offers<small>Fetched from Albert Heijn, Jumbo, Lidl and Dirk for the Bonus playlist</small></span>
+        <button class="switch" role="switch" data-opt-toggle="auto_discounts" aria-checked="${opts.auto_discounts !== false}" aria-label="Weekly supermarket offers"></button></label>` : ""}
     ${info.is_admin ? `<div class="sub-h">Instagram</div>
       <p class="hint" style="text-align:left">Instagram blocks some downloads without a login. Paste the <b>sessionid</b> cookie (or a cookies.txt export) of an Instagram account here. A second account is safest. ${info.instagram_cookies ? "<b>Cookies are set.</b>" : ""}</p>
       <textarea class="field" id="ig" rows="2" placeholder="${info.instagram_cookies ? "Paste new cookies to replace, or leave empty and save to remove" : "sessionid=…"}"></textarea>

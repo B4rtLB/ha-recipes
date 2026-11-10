@@ -53,6 +53,17 @@ class DiscountStore:
         self.data = await self._store.async_load() or {"updated": None, "stores": {}}
         self.data.setdefault("stores", {})
 
+    def terms_cache(self) -> dict[str, list[str]]:
+        """Search words found for products in earlier weeks (cleaned product name -> terms)."""
+        return self.data.setdefault("terms_cache", {})
+
+    def save_cache(self) -> None:
+        """Save after the cache changed; keeps the newest 4000 names."""
+        cache = self.terms_cache()
+        for key in list(cache)[: max(0, len(cache) - 4000)]:
+            del cache[key]
+        self._store.async_delay_save(lambda: self.data, 0.5)
+
     def set_store(self, key: str, entry: dict[str, Any] | None) -> None:
         """Replace (or with None remove) one supermarket's list and save."""
         if entry is None:

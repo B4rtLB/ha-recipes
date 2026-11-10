@@ -62,3 +62,25 @@ set_discounts:
       example: '[{"name": "Chicken breast", "terms": ["kipfilet", "chicken breast"], "price": "€4.99", "was": "€6.49", "note": "2nd half price"}]'
       selector:
         object:
+refresh_discounts:
+  fields:
+    store:
+      required: false
+      example: "[ah, jumbo]"
+      selector:
+        select:
+          multiple: true
+          options:
+            - ah
+            - jumbo
+            - lidl
+            - dirk
+    force:
+      required: false
+      default: false
+      selector:
+        boolean:
+    test_base:
+      required: false
+      selector:
+        text:

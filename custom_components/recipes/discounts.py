@@ -6,6 +6,7 @@ Discounts are stored per supermarket as
     {"valid_from": "2026-11-09", "valid_to": "2026-11-15",
      "items": [{"name": "Kipfilet", "terms": ["kipfilet", "chicken breast"],
                 "price": "€4.99", "was": "€6.49", "note": "2e halve prijs"}]}
+An item may also carry its own "valid_from" / "valid_to" (default: the list's period).
 Recipes are written in English while the supermarkets are Dutch, so matching is
 done on ``terms``: normalised keywords in Dutch AND English that whoever feeds the
 data supplies. An ingredient matches an item when ALL tokens of ONE of its terms
@@ -92,6 +93,13 @@ def clean_store(store: str, valid_from: Any, valid_to: Any, items: Any) -> dict[
         for key in ("price", "was", "note"):
             if item.get(key) not in (None, ""):
                 clean[key] = str(item[key]).strip()
+        # Optional own period: shops start and end offers on different days within one list.
+        for key in ("valid_from", "valid_to"):
+            if item.get(key) not in (None, ""):
+                try:
+                    clean[key] = date.fromisoformat(str(item[key])).isoformat()
+                except ValueError as err:
+                    raise ValueError(f"item {name!r}: {key} must be a date like 2026-11-09") from err
         out.append(clean)
     return {"valid_from": d_from.isoformat(), "valid_to": d_to.isoformat(), "items": out}
 
@@ -100,8 +108,15 @@ def active_stores(data: dict[str, Any], today: str) -> dict[str, dict[str, Any]]
     """The stores whose list is valid today (ISO date in the local timezone). Expired lists count as none."""
     out = {}
     for key, entry in ((data or {}).get("stores") or {}).items():
-        if key in STORES and entry.get("items") and entry.get("valid_from", "") <= today <= entry.get("valid_to", ""):
-            out[key] = entry
+        if key not in STORES or not entry.get("valid_from", "") <= today <= entry.get("valid_to", ""):
+            continue
+        # items may carry their own period; the list's period is the default
+        items = [
+            i for i in entry.get("items") or []
+            if i.get("valid_from", entry["valid_from"]) <= today <= i.get("valid_to", entry["valid_to"])
+        ]
+        if items:
+            out[key] = {**entry, "items": items}
     return out
 
 

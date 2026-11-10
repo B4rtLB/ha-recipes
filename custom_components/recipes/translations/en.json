@@ -13,7 +13,9 @@
           "language": "Recipe language",
           "transcribe": "Transcribe video audio when the caption is short",
           "notify_service": "Notify when a recipe is ready (notify entity like notify.barts_iphone, or a notify action)",
-          "todo_entity": "Shopping list (to-do list for ingredients)"
+          "todo_entity": "Shopping list (to-do list for ingredients)",
+          "extraction_mode": "Reading mode (classic or lean)",
+          "auto_discounts": "Refresh the weekly supermarket offers automatically"
         }
       }
     }
@@ -29,7 +31,9 @@
           "language": "Recipe language",
           "transcribe": "Transcribe video audio when the caption is short",
           "notify_service": "Notify when a recipe is ready (notify entity like notify.barts_iphone, or a notify action)",
-          "todo_entity": "Shopping list (to-do list for ingredients)"
+          "todo_entity": "Shopping list (to-do list for ingredients)",
+          "extraction_mode": "Reading mode (classic or lean)",
+          "auto_discounts": "Refresh the weekly supermarket offers automatically"
         }
       }
     }
@@ -101,7 +105,25 @@
         },
         "items": {
           "name": "Items",
-          "description": "List of {name, terms, price, was, note}. Only name is required (terms default to the name)."
+          "description": "List of {name, terms, price, was, note, valid_from, valid_to}. Only name is required (terms default to the name; an item may have its own period)."
+        }
+      }
+    },
+    "refresh_discounts": {
+      "name": "Refresh discounts",
+      "description": "Fetch this week's offers from Albert Heijn, Jumbo, Lidl and Dirk (only the lists that are missing, ended or older than 5 days, unless forced). Returns a report per supermarket.",
+      "fields": {
+        "store": {
+          "name": "Supermarkets",
+          "description": "Only these (ah, jumbo, lidl, dirk). Default: all."
+        },
+        "force": {
+          "name": "Force",
+          "description": "Fetch again even when the list is still fresh."
+        },
+        "test_base": {
+          "name": "Test base URL",
+          "description": "Development only: a local URL (127.0.0.1 or localhost) with fixture pages instead of the real shops."
         }
       }
     }

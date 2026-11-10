@@ -29,6 +29,10 @@ Open `https://<your-home-assistant>/recipes/` in Safari → Share → **Add to H
    - **Save Recipe** – in the share sheet of TikTok, Instagram, Safari and Photos. Sends the link/photo/PDF to the Recipes webhook.
    - **Recipe Timer** – started by the app's timer buttons; starts a Clock timer.
 
+### Weekly supermarket offers
+
+Recipes whose ingredients are on offer at Albert Heijn, Jumbo, Lidl or Dirk get a glow in the store's colour and show up in the **Bonus** playlist. The offers are fetched automatically (option *Refresh the weekly supermarket offers automatically*, on by default) from the shops' public offer pages, about once a week, and search words come from your AI Task. Service `recipes.refresh_discounts` fetches now (`force: true` to ignore freshness); `recipes.set_discounts` feeds a list by hand.
+
 ## API
 
 All endpoints need a Home Assistant token, except the webhook and the app shell.
