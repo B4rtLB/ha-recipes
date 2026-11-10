@@ -87,16 +87,24 @@ def best_url(*texts: str | None) -> str | None:
     Script/image/CDN links are skipped; a TikTok/Instagram/YouTube post wins
     over other links, otherwise the first remaining link is used.
     """
-    found: list[str] = []
-    for text in texts:
-        for match in URL_RE.finditer(text or ""):
-            url = match.group(0).rstrip(").,;!?]")
-            if url not in found and not is_asset_url(url):
-                found.append(url)
+    found = all_urls(*texts)
     posts = [u for u in found if is_post_url(u)]
     if posts:
         return posts[0]
     return found[0] if found else None
+
+
+def all_urls(*texts: str | None) -> list[str]:
+    """Every non-asset link in the texts, in order (handles links inside shared HTML/JSON)."""
+    found: list[str] = []
+    for text in texts:
+        text = (text or "").replace("\\u002F", "/").replace("\\u002f", "/").replace("\\/", "/")
+        text = html_lib.unescape(text)
+        for match in URL_RE.finditer(text):
+            url = match.group(0).rstrip(").,;!?]")
+            if url not in found and not is_asset_url(url):
+                found.append(url)
+    return found
 
 
 @dataclass

@@ -15,6 +15,7 @@ import voluptuous as vol
 
 from homeassistant.helpers import config_validation as cv
 
+from . import sources
 from .const import CONF_WEBHOOK_ID, DOMAIN, URL_STATIC
 from .pipeline import RecipeProcessor, new_recipe_from_payload
 from .store import RecipeStore
@@ -81,7 +82,8 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
                 "source": r.get("source"),
                 "media": r.get("media"),
                 "shared": r.get("shared"),
-                "input_text": (r.get("input_text") or "")[:3000] or None,
+                "input_text": (r.get("input_text") or "")[:1500] or None,
+                "links_found": sources.all_urls(r.get("shared"), r.get("input_text"))[:60],
                 "notes": r.get("pipeline_notes"),
                 "created": r.get("created"),
                 "updated": r.get("updated"),
