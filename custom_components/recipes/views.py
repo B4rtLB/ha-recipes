@@ -14,11 +14,19 @@ from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.components.http.auth import async_sign_path
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 
 from .const import (
+    CONF_AI_TASK_ENTITY,
+    CONF_LANGUAGE,
+    CONF_NOTIFY_SERVICE,
+    CONF_STT_ENTITY,
     CONF_TODO_ENTITY,
+    CONF_TRANSCRIBE,
     CONF_WEBHOOK_ID,
+    DEFAULT_LANGUAGE,
     DOMAIN,
+    LANGUAGES,
     SIGNED_URL_HOURS,
     STATUS_ERROR,
     STATUS_READY,
@@ -274,6 +282,8 @@ class RecipeView(HomeAssistantView):
         allowed = {"favorite", "title", "my_notes", "tags", "servings", "last_cooked"}
         changes = {k: v for k, v in body.items() if k in allowed}
         recipe = store.async_update(recipe_id, changes)
+        if "title" in changes:
+            await store.async_rename_media(recipe_id)
         return self.json(serialize(hass, recipe, full=True))
 
     async def delete(self, request: web.Request, recipe_id: str) -> web.Response:
@@ -318,8 +328,6 @@ class RecipeShoppingView(HomeAssistantView):
         )
         if not entity_id or not items:
             return self.json_message("No to-do list or no items", HTTPStatus.BAD_REQUEST)
-        from homeassistant.exceptions import HomeAssistantError  # noqa: PLC0415
-
         try:
             for item in items:
                 await hass.services.async_call(
@@ -349,8 +357,80 @@ class RecipeMediaView(HomeAssistantView):
         return web.FileResponse(path, headers={"Cache-Control": "private, max-age=604800"})
 
 
+ENTITY_OPTIONS = {CONF_AI_TASK_ENTITY: "ai_task", CONF_STT_ENTITY: "stt", CONF_TODO_ENTITY: "todo"}
+
+
+def _entity_choices(hass: HomeAssistant, domain: str) -> list[dict[str, str]]:
+    return sorted(
+        ({"id": state.entity_id, "name": state.name} for state in hass.states.async_all(domain)),
+        key=lambda c: c["name"].lower(),
+    )
+
+
+def _notify_choices(hass: HomeAssistant) -> list[dict[str, str]]:
+    """Notify entities plus the classic notify.* services (e.g. notify.mobile_app_...)."""
+    choices = _entity_choices(hass, "notify")
+    taken = {c["id"] for c in choices}
+    for name in sorted(hass.services.async_services().get("notify", {})):
+        service = f"notify.{name}"
+        if name != "send_message" and service not in taken:
+            choices.append({"id": service, "name": service})
+    return choices
+
+
+def _options_payload(hass: HomeAssistant, options: dict[str, Any]) -> dict[str, Any]:
+    """Current integration options and what can be picked for each."""
+    return {
+        "options": {
+            CONF_AI_TASK_ENTITY: options.get(CONF_AI_TASK_ENTITY) or None,
+            CONF_STT_ENTITY: options.get(CONF_STT_ENTITY) or None,
+            CONF_LANGUAGE: options.get(CONF_LANGUAGE, DEFAULT_LANGUAGE),
+            CONF_TRANSCRIBE: bool(options.get(CONF_TRANSCRIBE, True)),
+            CONF_TODO_ENTITY: options.get(CONF_TODO_ENTITY) or None,
+            CONF_NOTIFY_SERVICE: options.get(CONF_NOTIFY_SERVICE) or None,
+        },
+        "choices": {
+            **{key: _entity_choices(hass, domain) for key, domain in ENTITY_OPTIONS.items()},
+            CONF_NOTIFY_SERVICE: _notify_choices(hass),
+            CONF_LANGUAGE: [{"id": k, "name": v} for k, v in LANGUAGES.items()],
+        },
+    }
+
+
+def _validate_options(hass: HomeAssistant, current: dict[str, Any], changes: Any) -> dict[str, Any]:
+    """Merge changed options into the current ones; ValueError when one is not valid."""
+    if not isinstance(changes, dict):
+        raise ValueError("Expected an object with options")
+    options = dict(current)
+    for key, value in changes.items():
+        if isinstance(value, str):
+            value = value.strip()
+        if key in ENTITY_OPTIONS:
+            domain = ENTITY_OPTIONS[key]
+            if value and not (
+                isinstance(value, str) and value.startswith(f"{domain}.") and hass.states.get(value)
+            ):
+                raise ValueError(f"Unknown {domain} entity: {value}")
+        elif key == CONF_LANGUAGE:
+            if value not in LANGUAGES:
+                raise ValueError(f"Unknown language: {value}")
+        elif key == CONF_TRANSCRIBE:
+            if not isinstance(value, bool):
+                raise ValueError("transcribe must be true or false")
+        elif key == CONF_NOTIFY_SERVICE:
+            if value and not (isinstance(value, str) and re.fullmatch(r"[a-z_]+\.[a-z0-9_]+", value)):
+                raise ValueError(f"Not a notify entity or service: {value}")
+        else:
+            raise ValueError(f"Unknown option: {key}")
+        if value in (None, ""):
+            options.pop(key, None)  # same as leaving the field empty in the options flow
+        else:
+            options[key] = value
+    return options
+
+
 class SettingsView(HomeAssistantView):
-    """App info and admin settings (Instagram cookies)."""
+    """App info and admin settings (integration options, Instagram cookies)."""
 
     url = URL_API + "/settings"
     name = "api:recipes:settings"
@@ -363,6 +443,7 @@ class SettingsView(HomeAssistantView):
 
         cookies = await hass.async_add_executor_job(data.processor.cookie_file.exists)
         recipes = data.store.recipes.values()
+        is_admin = request["hass_user"].is_admin
         return self.json(
             {
                 "version": VERSION,
@@ -372,36 +453,137 @@ class SettingsView(HomeAssistantView):
                 "count": len(data.store.recipes),
                 "errors": sum(1 for r in recipes if r.get("status") == STATUS_ERROR),
                 "ready": sum(1 for r in recipes if r.get("status") == STATUS_READY),
-                "is_admin": request["hass_user"].is_admin,
+                "is_admin": is_admin,
                 "todo_entity": data.processor.options.get(CONF_TODO_ENTITY)
                 or ("todo.shopping_list" if hass.states.get("todo.shopping_list") else None),
+                **(_options_payload(hass, dict(data.entry.options)) if is_admin else {}),
             }
         )
 
     async def post(self, request: web.Request) -> web.Response:
-        """Save Instagram cookies (Netscape cookies.txt format), admin only."""
+        """Admin only. Body: {"options": {...}} and/or {"instagram_cookies": "..."}.
+
+        Options are the same keys as the Home Assistant options flow. Cookies
+        are in Netscape cookies.txt format, a cookie header or a bare sessionid;
+        an empty value removes them.
+        """
         hass: HomeAssistant = request.app["hass"]
         if not request["hass_user"].is_admin:
             return self.json_message("Admin only", HTTPStatus.FORBIDDEN)
+        data = _data(hass)
         body = await request.json()
-        cookies = (body.get("instagram_cookies") or "").strip()
-        path = _data(hass).processor.cookie_file
-        if not cookies:
-            await hass.async_add_executor_job(lambda: path.unlink(missing_ok=True))
-            return self.json({"ok": True, "instagram_cookies": False})
-        text = cookies_to_netscape(cookies)
-        if text is None:
-            return self.json_message(
-                "Could not read these cookies. Paste a cookies.txt export or the sessionid value.",
-                HTTPStatus.BAD_REQUEST,
+        result: dict[str, Any] = {"ok": True}
+
+        if "options" in body:
+            try:
+                options = _validate_options(hass, dict(data.entry.options), body["options"])
+            except ValueError as err:
+                return self.json_message(str(err), HTTPStatus.BAD_REQUEST)
+            hass.config_entries.async_update_entry(data.entry, options=options)
+            # The update listener does this too, but only after this request.
+            data.processor.options = {**data.entry.data, **options}
+            result.update(_options_payload(hass, options))
+
+        if "instagram_cookies" in body:
+            cookies = (body.get("instagram_cookies") or "").strip()
+            path = data.processor.cookie_file
+            if not cookies:
+                await hass.async_add_executor_job(lambda: path.unlink(missing_ok=True))
+                result["instagram_cookies"] = False
+            else:
+                text = cookies_to_netscape(cookies)
+                if text is None:
+                    return self.json_message(
+                        "Could not read these cookies. Paste a cookies.txt export or the sessionid value.",
+                        HTTPStatus.BAD_REQUEST,
+                    )
+
+                def write() -> None:
+                    path.write_text(text)
+                    path.chmod(0o600)
+
+                await hass.async_add_executor_job(write)
+                result["instagram_cookies"] = True
+        return self.json(result)
+
+
+# ------------------------------------------------------------------ developer view
+
+
+class RecipeDebugView(HomeAssistantView):
+    """What the pipeline saw and did for one recipe (admin only)."""
+
+    url = URL_API + "/{recipe_id}/debug"
+    name = "api:recipes:debug"
+
+    async def get(self, request: web.Request, recipe_id: str) -> web.Response:
+        """Return debug.json of the last processing run."""
+        hass: HomeAssistant = request.app["hass"]
+        if not request["hass_user"].is_admin:
+            return self.json_message("Admin only", HTTPStatus.FORBIDDEN)
+        data = _data(hass)
+        recipe = data.store.recipes.get(recipe_id)
+        if recipe is None:
+            return self.json_message("Not found", HTTPStatus.NOT_FOUND)
+        debug = await data.processor.read_debug(recipe_id)
+        return self.json(
+            {
+                "available": debug is not None,
+                "debug": debug or {},
+                "folder": data.store.media_dir(recipe_id).name,
+                "language": data.processor.options.get(CONF_LANGUAGE, DEFAULT_LANGUAGE),
+            }
+        )
+
+
+class RecipeDebugRerunView(HomeAssistantView):
+    """Experiment: run only the AI step again on the cached material (admin only)."""
+
+    url = URL_API + "/{recipe_id}/debug/rerun"
+    name = "api:recipes:debug:rerun"
+
+    async def post(self, request: web.Request, recipe_id: str) -> web.Response:
+        """Body: {"instruction": optional extra instruction, "prompt": optional full prompt}.
+
+        Returns the new result; nothing is saved until /debug/apply.
+        """
+        hass: HomeAssistant = request.app["hass"]
+        if not request["hass_user"].is_admin:
+            return self.json_message("Admin only", HTTPStatus.FORBIDDEN)
+        data = _data(hass)
+        if recipe_id not in data.store.recipes:
+            return self.json_message("Not found", HTTPStatus.NOT_FOUND)
+        body = await request.json()
+        try:
+            result = await data.processor.rerun_ai(
+                recipe_id,
+                instruction=str(body.get("instruction") or "").strip() or None,
+                prompt=str(body.get("prompt") or "").strip() or None,
             )
+        except (ValueError, HomeAssistantError) as err:
+            return self.json_message(f"AI re-run failed: {err}", HTTPStatus.BAD_REQUEST)
+        return self.json(result)
 
-        def write() -> None:
-            path.write_text(text)
-            path.chmod(0o600)
 
-        await hass.async_add_executor_job(write)
-        return self.json({"ok": True, "instagram_cookies": True})
+class RecipeDebugApplyView(HomeAssistantView):
+    """Save the result of the last AI re-run as the recipe (admin only)."""
+
+    url = URL_API + "/{recipe_id}/debug/apply"
+    name = "api:recipes:debug:apply"
+
+    async def post(self, request: web.Request, recipe_id: str) -> web.Response:
+        """Apply the pending experiment."""
+        hass: HomeAssistant = request.app["hass"]
+        if not request["hass_user"].is_admin:
+            return self.json_message("Admin only", HTTPStatus.FORBIDDEN)
+        data = _data(hass)
+        if recipe_id not in data.store.recipes:
+            return self.json_message("Not found", HTTPStatus.NOT_FOUND)
+        try:
+            await data.processor.apply_experiment(recipe_id)
+        except ValueError as err:
+            return self.json_message(str(err), HTTPStatus.BAD_REQUEST)
+        return self.json(serialize(hass, data.store.recipes[recipe_id], full=True))
 
 
 def cookies_to_netscape(raw: str) -> str | None:
@@ -431,5 +613,6 @@ def register_views(hass: HomeAssistant) -> None:
     for view in (
         AppIndexView, ServiceWorkerView, ManifestView, RecipesListView, SettingsView,
         RecipeView, RecipeRetryView, RecipeShoppingView, RecipeMediaView,
+        RecipeDebugView, RecipeDebugRerunView, RecipeDebugApplyView,
     ):
         hass.http.register_view(view())

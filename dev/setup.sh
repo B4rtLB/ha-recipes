@@ -40,5 +40,4 @@ webhook:
 fake_ai:
 YAML
 if [ -z "${SKIP_NODE:-}" ] && [ -f package.json ]; then npm install --silent && npx playwright install chromium; fi
-grep -q "tiktok.com.localtest" /etc/hosts || echo "Add this line to /etc/hosts for the video tests:  127.0.0.1 tiktok.com.localtest   (sudo sh -c 'echo \"127.0.0.1 tiktok.com.localtest\" >> /etc/hosts')"
 echo "Done. Next: ./dev/run.sh (keeps running), then python3 dev/bootstrap.py once."

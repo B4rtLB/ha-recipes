@@ -55,6 +55,8 @@ the dish name). Description: one short sentence about the dish, or null.
 use tags exactly as written:
 {tags}
   Quick = ready in 30 minutes or less. MealPrep = keeps well in the fridge and reheats well.
+  Protein: always tag the main meat or fish when the dish has one (bacon, ham and chorizo \
+are Pork). Vegetarian only when there is no meat or fish at all.
 
 OUTPUT SHAPE
 {{
@@ -86,10 +88,16 @@ SOURCE MATERIAL
 {source}"""
 
 
-def build_prompt(source: str, language: str) -> str:
-    """Build the extraction prompt."""
+def build_prompt(source: str, language: str, extra: str | None = None) -> str:
+    """Build the extraction prompt. ``extra`` is an optional instruction for an experiment."""
     tags = "\n".join(f"  {group}: {' '.join(values)}" for group, values in TAG_GROUPS.items())
-    return PROMPT.format(language=LANGUAGES.get(language, language), tags=tags, source=source)
+    prompt = PROMPT.format(language=LANGUAGES.get(language, language), tags=tags, source=source)
+    if extra and extra.strip():
+        prompt += (
+            "\n\nEXTRA INSTRUCTION (it overrides the rules above where they conflict, "
+            "but never invent ingredients or steps):\n" + extra.strip()
+        )
+    return prompt
 
 
 def default_ai_task_entity(hass: HomeAssistant) -> str | None:
@@ -198,6 +206,30 @@ def _num(value: Any) -> float | None:
         return None
 
 
+# The AI sometimes forgets the Protein tag; these words in the title or an ingredient
+# name settle it then. Stock, broth and sauces don't count ("chicken stock", "fish sauce").
+_PROTEIN_WORDS = {
+    "Chicken": r"chicken|kip\w*",
+    "Beef": r"beef|steak|brisket|rund\w*|biefstuk",
+    "Pork": r"pork|bacon|ham|pancetta|chorizo|prosciutto|guanciale|lardons?|spek\w*|varkens\w*",
+    "Fish": r"fish|salmon|tuna|cod|trout|haddock|vis|zalm|tonijn|kabeljauw",
+    "Seafood": r"shrimps?|prawns?|mussels?|squid|crab|lobster|scallops?|clams?|garnalen|mosselen",
+}
+_PROTEIN_RE = {tag: re.compile(rf"\b(?:{words})\b", re.IGNORECASE) for tag, words in _PROTEIN_WORDS.items()}
+_NOT_THE_PROTEIN = re.compile(r"stock|broth|bouillon|sauce|saus|seasoning|flavou?r", re.IGNORECASE)
+
+
+def guess_protein(title: str, ingredient_names: list[str]) -> str | None:
+    """Protein tag from the title, else from the first ingredient that names one."""
+    for text in [title, *ingredient_names]:
+        if not text or _NOT_THE_PROTEIN.search(text):
+            continue
+        for tag, pattern in _PROTEIN_RE.items():
+            if pattern.search(text):
+                return tag
+    return None
+
+
 def normalize(data: dict[str, Any]) -> dict[str, Any]:
     """Validate and clean the model output into our recipe fields."""
     allowed = {t for values in TAG_GROUPS.values() for t in values}
@@ -245,6 +277,12 @@ def normalize(data: dict[str, Any]) -> dict[str, Any]:
         tag = str(tag).lstrip("#").strip()
         if tag in allowed and tag not in tags:
             tags.append(tag)
+
+    if not any(tag in TAG_GROUPS["Protein"] for tag in tags):
+        names = [item["name"] for group in groups for item in group["items"]]
+        if protein := guess_protein(str(data.get("title") or ""), names):
+            order = [t for values in TAG_GROUPS.values() for t in values]
+            tags = sorted([*tags, protein], key=order.index)
 
     def minutes(key: str) -> int | None:
         value = _num(data.get(key))

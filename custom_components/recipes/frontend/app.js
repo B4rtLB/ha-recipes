@@ -45,6 +45,7 @@ const I = {
   pot: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10h16v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z"/><path d="M2 10h2M20 10h2M9 3.5c0 1.5 1 1.5 1 3M13 3.5c0 1.5 1 1.5 1 3"/></svg>',
   photo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><circle cx="9" cy="10" r="1.6"/><path d="M21 15l-5-4.5L7 19"/></svg>',
   cart: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4h2.5l2.2 10.5a1.5 1.5 0 0 0 1.5 1.2h7.9a1.5 1.5 0 0 0 1.5-1.1L20.5 8H6.3"/><circle cx="10" cy="20" r="1.3"/><circle cx="17" cy="20" r="1.3"/></svg>',
+  code: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 7L3.5 12l5 5M15.5 7l5 5-5 5"/></svg>',
   paste: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="5" y="4.5" width="14" height="16.5" rx="2.5"/><path d="M9 4.5V3h6v1.5"/></svg>',
 };
 
@@ -188,8 +189,38 @@ const state = {
   search: "",
   searching: false,
   current: null,
+  admin: false,
 };
 let pollTimer = null;
+
+// Whether the signed-in user is a Home Assistant admin (developer view, integration settings).
+let adminReady = Promise.resolve();
+function loadAdmin() {
+  adminReady = api("/settings").then((info) => { state.admin = !!info.is_admin; }).catch(() => {});
+  return adminReady;
+}
+
+// While a sheet is open the page behind it must not scroll. iOS ignores
+// overflow:hidden on the body in standalone mode, so the body is pinned
+// instead and the scroll position is put back afterwards.
+const ScrollLock = {
+  on: false,
+  y: 0,
+  lock() {
+    if (this.on) return;
+    this.on = true;
+    this.y = window.scrollY;
+    document.body.style.top = -this.y + "px";
+    document.documentElement.classList.add("locked");
+  },
+  unlock() {
+    if (!this.on) return;
+    this.on = false;
+    document.documentElement.classList.remove("locked");
+    document.body.style.top = "";
+    window.scrollTo(0, this.y);
+  },
+};
 
 async function loadList() {
   const data = await api("");
@@ -218,6 +249,7 @@ function route() {
 async function render() {
   cleanupDetail();
   $("#sheet-root").innerHTML = "";
+  ScrollLock.unlock();
   const r = route();
   if (r.name === "detail") return renderDetail(r.id);
   return renderLibrary(true);
@@ -312,8 +344,8 @@ async function renderLibrary(fetch_ = true) {
     <div class="scroll-edge" id="edge"></div>
     <div class="lib-top" id="libtop">
       <div class="compact">${title}</div>
-      <button class="icon-btn glass press" data-act="settings" aria-label="Settings">${I.more}</button>
       <button class="icon-btn glass press accent" data-act="add" aria-label="Add recipe">${I.plus}</button>
+      <button class="icon-btn glass press" data-act="settings" aria-label="Settings">${I.more}</button>
     </div>
     <div class="lib-top-space"></div>
     <h1 class="large-title" id="ltitle">${title}</h1>
@@ -357,6 +389,7 @@ function bindLibrary() {
   if (libScroll) window.removeEventListener("scroll", libScroll);
   libScroll = () => {
     if (!top.isConnected) { window.removeEventListener("scroll", libScroll); libScroll = null; return; }
+    if (ScrollLock.on) return;
     const past = lt.getBoundingClientRect().bottom < top.getBoundingClientRect().bottom + 44;
     top.classList.toggle("scrolled", past);
     edge.classList.toggle("show", window.scrollY > 4);
@@ -399,7 +432,7 @@ function errorSplash(err) {
 
 // ------------------------------------------------------------------ detail
 let detailCleanup = [];
-function cleanupDetail() { detailCleanup.forEach((f) => f()); detailCleanup = []; }
+function cleanupDetail() { detailCleanup.forEach((f) => f()); detailCleanup = []; Dev.close(); }
 
 async function renderDetail(id) {
   const app = $("#app");
@@ -416,6 +449,9 @@ async function renderDetail(id) {
   window.scrollTo(0, 0);
   app.innerHTML = detailHTML(r);
   bindDetail(r);
+  // Wide screens: the developer sidebar sits next to the recipe (admins, until closed).
+  if (Dev.el) Dev.open(r);
+  else adminReady.then(() => { if (state.admin && Dev.wide() && store.get("dev", true) && route().id === id) Dev.open(r); });
   if (r.status === "queued" || r.status === "processing") {
     const t = setTimeout(() => route().id === id && renderDetail(id), 3000);
     detailCleanup.push(() => clearTimeout(t));
@@ -759,7 +795,7 @@ function setupVideo() {
   const hideHint = () => { hint.style.opacity = 0; hint.classList.remove("ready"); delete hint.dataset.buzzed; };
   const onStart = (e) => {
     touching = true;
-    startY = e.touches.length === 1 && window.scrollY <= 0 && !e.target.closest(".scrub, .sheet") ? e.touches[0].clientY : null;
+    startY = e.touches.length === 1 && !ScrollLock.on && window.scrollY <= 0 && !e.target.closest(".scrub, .sheet, .dev-panel") ? e.touches[0].clientY : null;
     pull = 0;
   };
   const onMove = (e) => {
@@ -892,8 +928,10 @@ function openSheet(html, onMount) {
   const root = $("#sheet-root");
   root.innerHTML = `<div class="sheet-backdrop"></div><div class="sheet glass dense" role="dialog"><div class="grabber"></div>${html}</div>`;
   const bd = $(".sheet-backdrop", root), sh = $(".sheet", root);
+  ScrollLock.lock();
   requestAnimationFrame(() => { bd.classList.add("open"); sh.classList.add("open"); });
   const close = () => {
+    ScrollLock.unlock();
     bd.classList.remove("open"); sh.classList.remove("open");
     setTimeout(() => { if (root.contains(sh)) root.innerHTML = ""; }, 380);
   };
@@ -955,6 +993,7 @@ function openMoreSheet(r) {
       ${navigator.share ? `<button data-m="share">${I.share}Share link</button>` : ""}
       <button data-m="reset">${I.check}Uncheck ingredients and steps</button>
       <button data-m="retry">${I.retry}Read recipe again</button>
+      ${state.admin ? `<button data-m="dev">${I.code}${Dev.el ? "Hide developer view" : "Developer"}</button>` : ""}
       <button data-m="delete" class="danger">${I.trash}Delete recipe</button>
     </div>`,
   (sh, close) => {
@@ -964,6 +1003,7 @@ function openMoreSheet(r) {
       if (m === "share") navigator.share({ title: r.title, url }).catch(() => {});
       if (m === "reset") { store.set("checked." + r.id, []); store.set("steps." + r.id, []); renderDetail(r.id); }
       if (m === "retry") retry(r);
+      if (m === "dev") Dev.toggle(r);
       if (m === "delete") removeRecipe(r);
     });
   });
@@ -987,6 +1027,15 @@ async function openSettingsSheet() {
   try { info = await api("/settings"); } catch (err) { toast(err.message); }
   const mode = store.get("timerMode", "clock");
   const shortcut = store.get("timerShortcut", "Recipe Timer");
+  const opts = info.options || {}, choices = info.choices || {};
+  const select = (key, label, emptyLabel) => {
+    const list = [...(choices[key] || [])];
+    if (opts[key] && !list.some((c) => c.id === opts[key])) list.push({ id: opts[key], name: opts[key] });
+    return `<label class="opt"><span>${label}</span><select class="field" data-opt="${key}">
+      ${emptyLabel ? `<option value="">${emptyLabel}</option>` : ""}
+      ${list.map((c) => `<option value="${esc(c.id)}" ${c.id === opts[key] ? "selected" : ""}>${esc(c.name)}</option>`).join("")}
+    </select></label>`;
+  };
   openSheet(`<h3>Recipes</h3>
     <div class="sub-h">Timers</div>
     <div class="menu">
@@ -994,6 +1043,15 @@ async function openSettingsSheet() {
       <button data-mode="app">${mode === "app" ? I.check : '<svg viewBox="0 0 24 24"></svg>'}Only show in this app</button>
     </div>
     <input class="field" id="sc-name" value="${esc(shortcut)}" placeholder="Shortcut name" style="margin-top:8px">
+    ${info.is_admin && info.options ? `<div class="sub-h">Reading recipes</div>
+      ${select("ai_task_entity", "AI Task", "Automatic")}
+      ${select("language", "Recipe language")}
+      <label class="opt row"><span>Listen to videos<small>Speech-to-text when the caption is short</small></span>
+        <button class="switch" role="switch" data-opt-toggle="transcribe" aria-checked="${!!opts.transcribe}" aria-label="Listen to videos"></button></label>
+      ${select("stt_entity", "Speech-to-text", "Automatic")}
+      <div class="sub-h">Shopping and notifications</div>
+      ${select("todo_entity", "To-do list for shopping", "Automatic")}
+      ${select("notify_service", "Notify when a recipe is saved", "No notification")}` : ""}
     ${info.is_admin ? `<div class="sub-h">Instagram</div>
       <p class="hint" style="text-align:left">Instagram blocks some downloads without a login. Paste the <b>sessionid</b> cookie (or a cookies.txt export) of an Instagram account here. A second account is safest. ${info.instagram_cookies ? "<b>Cookies are set.</b>" : ""}</p>
       <textarea class="field" id="ig" rows="2" placeholder="${info.instagram_cookies ? "Paste new cookies to replace, or leave empty and save to remove" : "sessionid=…"}"></textarea>
@@ -1009,6 +1067,19 @@ async function openSettingsSheet() {
   (sh) => {
     $$("[data-mode]", sh).forEach((b) => b.onclick = () => { store.set("timerMode", b.dataset.mode); openSettingsSheet(); });
     $("#sc-name", sh).onchange = (e) => store.set("timerShortcut", e.target.value.trim() || "Recipe Timer");
+    const saveOption = async (key, value, undo) => {
+      try { await api("/settings", { method: "POST", body: { options: { [key]: value } } }); toast("Saved"); }
+      catch (err) { undo(); toast(err.message, 4000); }
+    };
+    $$("[data-opt]", sh).forEach((el) => {
+      let last = el.value;
+      el.onchange = () => { const prev = last; last = el.value; saveOption(el.dataset.opt, el.value, () => { el.value = last = prev; }); };
+    });
+    $$("[data-opt-toggle]", sh).forEach((el) => el.onclick = () => {
+      const on = el.getAttribute("aria-checked") !== "true";
+      el.setAttribute("aria-checked", on);
+      saveOption(el.dataset.optToggle, on, () => el.setAttribute("aria-checked", !on));
+    });
     $("#ig-save", sh)?.addEventListener("click", async () => {
       try { const res = await api("/settings", { method: "POST", body: { instagram_cookies: $("#ig", sh).value } }); toast(res.instagram_cookies ? "Cookies saved" : "Cookies removed"); }
       catch (err) { toast(err.message, 4000); }
@@ -1017,6 +1088,135 @@ async function openSettingsSheet() {
     $("#logout", sh).onclick = () => { Auth.save(null); location.reload(); };
   });
 }
+
+// ------------------------------------------------------------------ developer view
+// What the pipeline saw and did for a recipe, plus "re-run AI only" experiments.
+// A sidebar next to the recipe on wide screens, full screen on the phone.
+const Dev = {
+  el: null,
+  recipe: null,
+  wide: () => window.matchMedia("(min-width: 1000px)").matches,
+  toggle(r) {
+    if (this.el) { store.set("dev", false); this.close(); }
+    else { store.set("dev", true); this.open(r); }
+  },
+  open(r) {
+    this.recipe = r;
+    if (!this.el) {
+      this.el = document.createElement("aside");
+      this.el.className = "dev-panel";
+      document.body.appendChild(this.el);
+      document.body.classList.add("dev-open");
+      if (!this.wide()) ScrollLock.lock();
+    }
+    this.load();
+  },
+  close() {
+    if (!this.el) return;
+    this.el.remove();
+    this.el = null;
+    document.body.classList.remove("dev-open");
+    ScrollLock.unlock();
+  },
+  block(title, text, open = false) {
+    if (text == null || text === "") return "";
+    text = String(text);
+    return `<details ${open ? "open" : ""}><summary>${title}<small>${text.length.toLocaleString("en")} chars</small></summary><pre>${esc(text)}</pre></details>`;
+  },
+  async load() {
+    const r = this.recipe, el = this.el;
+    const head = `<div class="dev-head"><h3>Developer</h3><button class="icon-btn glass press" data-dev="close" aria-label="Close developer view">${I.close}</button></div>`;
+    const bindClose = () => { $('[data-dev="close"]', el).onclick = () => { store.set("dev", false); this.close(); }; };
+    if (!el.firstChild) { el.innerHTML = head + `<p class="hint">Loading…</p>`; bindClose(); }
+    let res;
+    try { res = await api("/" + r.id + "/debug"); }
+    catch (err) { if (this.el === el) { el.innerHTML = head + `<p class="hint">${esc(err.message)}</p>`; bindClose(); } return; }
+    if (this.el !== el || this.recipe !== r) return;
+    const d = res.debug || {}, ai = d.ai || {};
+    const kv = (k, v) => (v == null || v === "" ? "" : `<div class="kv"><span>${k}</span><span>${esc(v)}</span></div>`);
+    const steps = [["download", "Download video"], ["transcribe", "Speech-to-text"], ["web", "Fetch web page"], ["collect", "All material"], ["ai", "AI"]];
+    const timings = steps.filter(([k]) => d.timings && d.timings[k] != null).map(([k, label]) => kv(label, d.timings[k].toFixed(1) + " s")).join("");
+    const errors = [...(d.errors || []), ...(d.error && !(d.errors || []).some((e) => e.includes(d.error)) ? [d.error] : [])];
+    el.innerHTML = head + `
+      ${kv("Status", r.status)}${kv("Platform", d.platform || (r.source || {}).platform)}${kv("Chosen link", d.url || (r.source || {}).url)}
+      ${kv("AI Task", ai.entity)}${kv("Processed", d.finished ? new Date(d.finished).toLocaleString() : "")}${kv("Media folder", res.folder)}
+      ${!res.available ? `<p class="hint" style="margin-top:18px">No debug data for this recipe yet. It is recorded the next time the recipe is read.</p>
+        <div class="actions"><button class="btn plain press" data-dev="retry">${I.retry}Read recipe again</button></div>` : `
+      ${timings ? `<div class="sub-h">Timings</div>${timings}` : ""}
+      ${(d.notes || []).length ? `<div class="sub-h">Pipeline notes</div>${d.notes.map((n) => `<div class="dev-note">${esc(n)}</div>`).join("")}` : ""}
+      ${errors.length ? `<div class="sub-h">Errors</div>${errors.map((n) => `<div class="dev-note err">${esc(n)}</div>`).join("")}` : ""}
+      <div class="sub-h">Material</div>
+      ${this.block("Shared input", d.shared)}${this.block("Saved note / text", d.input_text)}
+      ${this.block("Caption", d.caption)}${this.block("Transcript", d.transcript)}${this.block("Web page", d.web_text)}
+      ${(d.attachments || []).length ? kv("Attachments", d.attachments.join(", ")) : ""}
+      <div class="sub-h">AI</div>
+      ${this.block("Prompt sent", ai.prompt)}${this.block("Raw output", ai.output)}${this.block("First output (not valid JSON)", ai.unparseable_output)}
+      <div class="sub-h">Experiment</div>
+      <p class="hint" style="text-align:left">Runs only the AI step again on the material above. Nothing is saved until you confirm.</p>
+      <textarea class="field" id="dev-instr" rows="2" placeholder="Extra instruction (optional)"></textarea>
+      <details class="dev-edit"><summary>Edit the full prompt</summary><textarea class="field mono" id="dev-prompt" rows="14" spellcheck="false">${esc(ai.prompt || "")}</textarea></details>
+      <div class="actions"><button class="btn primary press" id="dev-run">Re-run AI only</button></div>
+      <div id="dev-result"></div>`}`;
+    bindClose();
+    $('[data-dev="retry"]', el)?.addEventListener("click", () => retry(r));
+    const run = $("#dev-run", el);
+    if (run) run.onclick = async () => {
+      const instruction = $("#dev-instr", el).value.trim();
+      let prompt = $("#dev-prompt", el).value;
+      const edited = prompt.trim() !== (ai.prompt || "").trim();
+      if (edited && instruction) prompt += "\n\nEXTRA INSTRUCTION:\n" + instruction;
+      run.disabled = true; run.textContent = "Asking the AI…";
+      const out = $("#dev-result", el);
+      try {
+        const result = await api("/" + r.id + "/debug/rerun", { method: "POST", body: edited ? { prompt } : { instruction } });
+        if (out.isConnected) this.showResult(out, result);
+      } catch (err) { if (out.isConnected) out.innerHTML = `<div class="dev-note err">${esc(err.message)}</div>`; }
+      run.disabled = false; run.textContent = "Re-run AI only";
+    };
+  },
+  // The parts of a recipe that the AI writes, as [label, html] rows.
+  rows(x) {
+    const time = [["Prep", x.prep_min], ["Cook", x.cook_min], ["Total", x.total_min]].filter(([, v]) => v).map(([k, v]) => `${k} ${minutesLabel(v)}`).join(" · ");
+    return [
+      ["Title", esc(x.title || "")],
+      ["Description", esc(x.description || "")],
+      ["Time", esc(time + (x.estimated ? " (estimated)" : ""))],
+      ["Servings", esc([x.servings, x.servings_text].filter(Boolean).join(" · "))],
+      ["Tags", esc((x.tags || []).map(tagLabel).join(", "))],
+      ["Ingredients", (x.ingredient_groups || []).map((g) => (g.name ? `<b>${esc(g.name)}</b>` : "") +
+        g.items.map((it) => `<div>${esc(ingredientText(it, 1))}${it.original ? ` <small>(${esc(it.original)})</small>` : ""}</div>`).join("")).join("")],
+      ["Steps", (x.steps || []).map((st, i) => `<div>${i + 1}. ${esc(st.text)}${(st.timers || []).map((t) => ` <small>[${esc(secondsLabel(t.seconds))}]</small>`).join("")}</div>`).join("")],
+      ["Tips", esc(x.source_notes || "")],
+    ];
+  },
+  showResult(out, result) {
+    const r = this.recipe;
+    const raw = this.block("Raw output of this run", result.output);
+    const secs = Number(result.seconds || 0).toFixed(1);
+    if (!result.fields) {
+      out.innerHTML = `<div class="dev-note err">The AI found no recipe in the material (${secs} s).</div>${raw}`;
+      return;
+    }
+    const cur = this.rows(r), next = this.rows(result.fields);
+    const changed = cur.filter((row, i) => row[1] !== next[i][1]).length;
+    out.innerHTML = `<div class="sub-h">Result · ${secs} s · ${changed ? `${changed} part${changed === 1 ? "" : "s"} changed` : "no changes"}</div>
+      <div class="cmp cols"><div>Current</div><div>New</div></div>
+      ${cur.map(([label, html], i) => (html || next[i][1]) ? `<div class="cmp-k ${html !== next[i][1] ? "diff" : ""}">${label}${html !== next[i][1] ? " · changed" : ""}</div>
+        <div class="cmp"><div>${html || "–"}</div><div>${next[i][1] || "–"}</div></div>` : "").join("")}
+      ${raw}
+      <div class="actions"><button class="btn plain press" id="dev-discard">Discard</button><button class="btn primary press" id="dev-save">Save new version</button></div>`;
+    $("#dev-discard", out).onclick = () => { out.innerHTML = ""; };
+    $("#dev-save", out).onclick = async () => {
+      try {
+        await api("/" + r.id + "/debug/apply", { method: "POST" });
+        toast("Saved");
+        loadList().catch(() => {});
+        renderDetail(r.id);
+      } catch (err) { toast(err.message, 4000); }
+    };
+    out.scrollIntoView({ behavior: "smooth", block: "start" });
+  },
+};
 
 // ------------------------------------------------------------------ boot
 async function boot() {
@@ -1029,6 +1229,7 @@ async function boot() {
   if (!Auth.tokens) { Auth.login(); return; }
   window.addEventListener("hashchange", render);
   Timers.render();
+  loadAdmin();
   await render();
   if ("serviceWorker" in navigator) navigator.serviceWorker.register("/recipes/sw.js", { scope: "/recipes/" }).catch(() => {});
   document.addEventListener("visibilitychange", () => {

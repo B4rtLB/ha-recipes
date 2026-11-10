@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import base64
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
+from contextlib import contextmanager
+import json
 import logging
 from pathlib import Path
+import time
 from typing import Any
 
 import aiohttp
@@ -28,12 +31,31 @@ from .const import (
     STATUS_QUEUED,
     STATUS_READY,
 )
-from .store import RecipeStore, normalize_url
+from .store import RecipeStore, normalize_url, utcnow_iso
 
 _LOGGER = logging.getLogger(__name__)
 
 IMAGE_MAX = 15 * 1024 * 1024
 CAPTION_IS_ENOUGH = 350  # characters; shorter captions get a transcript as well
+DEBUG_FILE = "debug.json"
+
+
+class DebugLog:
+    """What happened while processing one recipe; saved as debug.json in its media folder."""
+
+    def __init__(self) -> None:
+        """Start a new record."""
+        self.data: dict[str, Any] = {"started": utcnow_iso(), "timings": {}, "errors": [], "ai": {}}
+
+    @contextmanager
+    def step(self, name: str) -> Iterator[None]:
+        """Time one step (seconds)."""
+        started = time.monotonic()
+        try:
+            yield
+        finally:
+            timings = self.data["timings"]
+            timings[name] = round(timings.get(name, 0) + time.monotonic() - started, 2)
 
 
 class RecipeProcessor:
@@ -47,6 +69,8 @@ class RecipeProcessor:
         self._queue: asyncio.Queue[str] = asyncio.Queue()
         self._worker: asyncio.Task | None = None
         self.cookie_file: Path = Path(hass.config.path(".storage", "recipes_instagram_cookies.txt"))
+        # Results of "re-run AI only" that wait for a confirm, per recipe (not persisted).
+        self.experiments: dict[str, dict[str, Any]] = {}
 
     @property
     def session(self) -> aiohttp.ClientSession:
@@ -93,12 +117,74 @@ class RecipeProcessor:
         self.store.async_update(recipe_id, changes)
 
     async def process(self, recipe_id: str) -> None:
-        """Process a single recipe end to end."""
+        """Process a single recipe end to end and keep a debug record of it."""
+        dbg = DebugLog()
+        async with self.store.media_lock:
+            try:
+                await self._process(recipe_id, dbg)
+            except asyncio.CancelledError:
+                raise
+            except Exception as err:
+                dbg.data["errors"].append(f"{type(err).__name__}: {err}")
+                raise
+            finally:
+                await self._write_debug(recipe_id, dbg.data)
+
+    async def _process(self, recipe_id: str, dbg: DebugLog) -> None:
         recipe = self.store.recipes[recipe_id]
         folder = self.store.media_dir(recipe_id)
         await self.hass.async_add_executor_job(lambda: folder.mkdir(parents=True, exist_ok=True))
         self._set(recipe_id, status=STATUS_PROCESSING, progress="Reading source")
 
+        with dbg.step("collect"):
+            material, attachments, media, source, notes = await self._collect(recipe_id, folder, dbg)
+        dbg.data["material"] = material
+        dbg.data["attachments"] = [p.name for p in attachments]
+
+        if not material and not attachments:
+            raise ValueError("Nothing found to read a recipe from (empty caption and no video audio)")
+
+        self._set(recipe_id, progress="Writing recipe", media=media, source=source)
+        prompt = ai.build_prompt(
+            "\n\n".join(material) or "(see attachment)", self.options.get(CONF_LANGUAGE, DEFAULT_LANGUAGE)
+        )
+        with dbg.step("ai"):
+            data = await self._extract(prompt, attachments, dbg.data["ai"])
+
+        if data.get("recipe_found") is False:
+            self._set(
+                recipe_id,
+                status=STATUS_ERROR,
+                title=recipe.get("title") or data.get("title") or "No recipe found",
+                error="No recipe found in this post. Is the recipe in the comments or behind a link in bio?",
+                media=media,
+                progress=None,
+            )
+            await self._notify(recipe_id, failed=True)
+            return
+
+        fields = ai.normalize(data)
+        if not media.get("image") and media.get("poster"):
+            media["image"] = media["poster"]
+        self._set(
+            recipe_id,
+            **fields,
+            media=media,
+            source=source,
+            status=STATUS_READY,
+            progress=None,
+            error=None,
+            pipeline_notes=notes,
+        )
+        # The title is known now: give the media folder its readable name.
+        await self.store.async_rename_media(recipe_id, locked=True)
+        await self._notify(recipe_id)
+
+    async def _collect(
+        self, recipe_id: str, folder: Path, dbg: DebugLog
+    ) -> tuple[list[str], list[Path], dict[str, Any], dict[str, Any], list[str]]:
+        """Gather everything the AI gets to read: text material and attachments."""
+        recipe = self.store.recipes[recipe_id]
         source = recipe.get("source") or {}
         url: str | None = source.get("url")
         if url and sources.is_asset_url(url):
@@ -114,6 +200,9 @@ class RecipeProcessor:
         attachments: list[Path] = []
         media: dict[str, Any] = dict(recipe.get("media") or {})
         notes: list[str] = []
+        dbg.data.update(
+            shared=recipe.get("shared"), input_text=recipe.get("input_text"), url=url, platform=platform, notes=notes
+        )
 
         # 1. Imported text (Apple Notes import / shared text) --------------------
         if recipe.get("input_text"):
@@ -140,7 +229,14 @@ class RecipeProcessor:
         # 3. Social video --------------------------------------------------------
         if url and platform in ("tiktok", "instagram", "youtube"):
             self._set(recipe_id, progress="Downloading video")
-            social = await self._social(url, platform, folder, media, notes)
+            with dbg.step("download"):
+                social = await self._social(url, platform, folder, media, notes)
+            dbg.data["caption"] = social.get("text") or None
+            dbg.data["download"] = {
+                "author": social.get("author"),
+                "canonical_url": social.get("canonical_url"),
+                "video": {k: media.get(k) for k in ("video", "width", "height", "duration", "has_audio")},
+            }
             if social.get("canonical_url"):
                 source["url_canonical"] = social["canonical_url"]
             if social.get("author"):
@@ -158,7 +254,9 @@ class RecipeProcessor:
                 and (caption_len < CAPTION_IS_ENOUGH or not have_text)
             ):
                 self._set(recipe_id, progress="Listening to video")
-                transcript = await self._transcribe(folder / media["video"], social.get("text", ""))
+                with dbg.step("transcribe"):
+                    transcript = await self._transcribe(folder / media["video"], social.get("text", ""))
+                dbg.data["transcript"] = transcript
                 if transcript:
                     material.append("SPEECH TRANSCRIPT OF THE VIDEO:\n" + transcript)
                     notes.append("transcribed")
@@ -166,7 +264,9 @@ class RecipeProcessor:
         # 4. Regular web page ----------------------------------------------------
         elif url and not recipe.get("input_text"):
             self._set(recipe_id, progress="Reading web page")
-            web = await sources.fetch_web(self.session, url)
+            with dbg.step("web"):
+                web = await sources.fetch_web(self.session, url)
+            dbg.data["web_text"] = web.text
             material.append(web.text)
             source["url_canonical"] = web.canonical_url
             if web.image_url and not media.get("image"):
@@ -181,51 +281,97 @@ class RecipeProcessor:
             except (aiohttp.ClientError, TimeoutError):
                 pass
 
-        if not material and not attachments:
-            raise ValueError("Nothing found to read a recipe from (empty caption and no video audio)")
+        return material, attachments, media, {**source, "platform": platform}, notes
 
-        # 5. AI extraction -------------------------------------------------------
-        self._set(recipe_id, progress="Writing recipe", media=media, source={**source, "platform": platform})
+    async def _extract(self, prompt: str, attachments: list[Path], record: dict[str, Any]) -> dict[str, Any]:
+        """The AI step on its own: prompt + attachments in, parsed JSON out."""
         entity_id = self.options.get(CONF_AI_TASK_ENTITY) or ai.default_ai_task_entity(self.hass)
         if not entity_id:
             raise ValueError("No AI Task entity configured (Settings → Recipes → Configure)")
-        prompt = ai.build_prompt("\n\n".join(material) or "(see attachment)", self.options.get(CONF_LANGUAGE, DEFAULT_LANGUAGE))
+        record.update(entity=entity_id, prompt=prompt)
         text = await ai.run_ai_task(self.hass, entity_id, prompt, attachments)
+        record["output"] = text
         try:
-            data = ai.parse_json(text)
+            return ai.parse_json(text)
         except ValueError:
             _LOGGER.debug("Unparseable AI output: %s", text[:2000])
+            record["unparseable_output"] = text
             text = await ai.run_ai_task(
                 self.hass, entity_id, prompt + "\n\nReturn ONLY valid JSON this time.", attachments
             )
-            data = ai.parse_json(text)
+            record["output"] = text
+            return ai.parse_json(text)
 
-        if data.get("recipe_found") is False:
-            self._set(
-                recipe_id,
-                status=STATUS_ERROR,
-                title=recipe.get("title") or data.get("title") or "No recipe found",
-                error="No recipe found in this post. Is the recipe in the comments or behind a link in bio?",
-                media=media,
-                progress=None,
-            )
-            await self._notify(recipe_id, failed=True)
-            return
+    # ------------------------------------------------------------- debugging
 
-        fields = ai.normalize(data)
-        if not media.get("image") and media.get("poster"):
-            media["image"] = media["poster"]
-        self._set(
-            recipe_id,
-            **fields,
-            media=media,
-            source={**source, "platform": platform},
-            status=STATUS_READY,
-            progress=None,
-            error=None,
-            pipeline_notes=notes,
+    async def _write_debug(self, recipe_id: str, data: dict[str, Any]) -> None:
+        """Save the debug record next to the media (not in the Store, which stays small)."""
+        recipe = self.store.recipes.get(recipe_id)
+        if recipe is None:
+            return  # deleted meanwhile
+        data.update(finished=utcnow_iso(), status=recipe.get("status"), error=recipe.get("error"))
+        path = self.store.media_dir(recipe_id) / DEBUG_FILE
+
+        def write() -> None:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(data, ensure_ascii=False, indent=1))
+
+        try:
+            await self.hass.async_add_executor_job(write)
+        except OSError as err:
+            _LOGGER.debug("Could not write %s: %s", path, err)
+
+    async def read_debug(self, recipe_id: str) -> dict[str, Any] | None:
+        """The debug record of the last processing run, if there is one."""
+        path = self.store.media_dir(recipe_id) / DEBUG_FILE
+
+        def read() -> dict[str, Any] | None:
+            try:
+                data = json.loads(path.read_text())
+            except (OSError, ValueError):
+                return None
+            return data if isinstance(data, dict) else None
+
+        return await self.hass.async_add_executor_job(read)
+
+    async def rerun_ai(
+        self, recipe_id: str, instruction: str | None = None, prompt: str | None = None
+    ) -> dict[str, Any]:
+        """Run only the AI step again on the cached material. Nothing is saved."""
+        dbg = await self.read_debug(recipe_id)
+        if not dbg or not (dbg.get("material") or dbg.get("attachments")):
+            raise ValueError("No cached material for this recipe yet. Use “Read recipe again” first.")
+        folder = self.store.media_dir(recipe_id)
+        names = [n for n in dbg.get("attachments") or [] if isinstance(n, str) and "/" not in n]
+        attachments = await self.hass.async_add_executor_job(
+            lambda: [folder / n for n in names if (folder / n).is_file()]
         )
-        await self._notify(recipe_id)
+        if not prompt:
+            prompt = ai.build_prompt(
+                "\n\n".join(dbg.get("material") or []) or "(see attachment)",
+                self.options.get(CONF_LANGUAGE, DEFAULT_LANGUAGE),
+                instruction,
+            )
+        record: dict[str, Any] = {"at": utcnow_iso(), "instruction": instruction or None}
+        started = time.monotonic()
+        data = await self._extract(prompt, attachments, record)
+        record["seconds"] = round(time.monotonic() - started, 2)
+        found = data.get("recipe_found") is not False
+        record["fields"] = ai.normalize(data) if found else None
+        self.experiments[recipe_id] = record
+        return record
+
+    async def apply_experiment(self, recipe_id: str) -> None:
+        """Save the result of the last AI re-run as the recipe."""
+        record = self.experiments.pop(recipe_id, None)
+        if not record or not record.get("fields"):
+            raise ValueError("Nothing to save. Re-run the AI first.")
+        self._set(recipe_id, **record["fields"], status=STATUS_READY, error=None, progress=None)
+        await self.store.async_rename_media(recipe_id)
+        dbg = await self.read_debug(recipe_id) or {}
+        dbg["ai"] = {k: record.get(k) for k in ("entity", "prompt", "output", "instruction", "at")}
+        dbg.setdefault("timings", {})["ai"] = record.get("seconds")
+        await self._write_debug(recipe_id, dbg)
 
     async def _social(
         self, url: str, platform: str, folder: Path, media: dict[str, Any], notes: list[str]

@@ -431,11 +431,18 @@ img { display: block; }
   opacity: 0; transition: opacity 0.3s var(--ease);
 }
 .sheet-backdrop.open { opacity: 1; }
+/* The page behind an open sheet is pinned (ScrollLock in app.js). */
+html.locked body { position: fixed; left: 0; right: 0; overflow: hidden; }
+/* The sheet is attached to the bottom edge. It reaches 48px below the screen so
+   the spring overshoot when it opens never shows a gap under it. */
 .sheet {
-  position: fixed; left: 8px; right: 8px; bottom: calc(var(--safe-bottom) + 8px); z-index: 61;
-  border-radius: 34px; padding: 10px 20px 22px; max-height: 86dvh; overflow-y: auto;
+  position: fixed; left: 0; right: 0; bottom: -48px; z-index: 61;
+  border-radius: 34px 34px 0 0; border-bottom: 0;
+  padding: 10px 20px calc(var(--safe-bottom) + 22px + 48px);
+  max-height: calc(88dvh + 48px); overflow-y: auto; overscroll-behavior: contain;
   transform: translateY(110%); transition: transform 0.5s var(--spring);
 }
+@media (min-width: 700px) { .sheet { left: 50%; right: auto; width: 560px; margin-left: -280px; } }
 .sheet.open { transform: none; }
 .sheet .grabber { width: 38px; height: 5px; border-radius: 3px; background: rgba(255, 255, 255, 0.3); margin: 0 auto 10px; }
 .sheet h3 { margin: 6px 0 4px; font-size: 22px; font-weight: 700; text-align: center; }
@@ -458,6 +465,73 @@ img { display: block; }
 .kv { display: flex; justify-content: space-between; gap: 12px; padding: 13px 4px; border-bottom: 0.5px solid var(--sep); font-size: 15px; }
 .kv span:last-child { color: var(--label-2); text-align: right; word-break: break-all; }
 .sheet .sub-h { font-size: 13px; font-weight: 600; color: var(--label-2); text-transform: uppercase; letter-spacing: 0.04em; margin: 22px 4px 8px; }
+
+/* settings: integration options */
+.opt { display: block; margin-top: 12px; }
+.opt > span { display: block; font-size: 15px; margin: 0 4px 6px; }
+.opt small { display: block; color: var(--label-2); font-size: 13px; margin-top: 2px; }
+.opt.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0; }
+.opt.row > span { margin-bottom: 0; }
+select.field {
+  -webkit-appearance: none; appearance: none; min-height: 48px; padding: 12px 40px 12px 16px;
+  text-overflow: ellipsis;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ebebf5' stroke-opacity='.6' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 10l5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; background-size: 18px;
+}
+.switch {
+  flex: none; width: 51px; height: 31px; border-radius: 16px; background: rgba(120, 120, 128, 0.32);
+  position: relative; transition: background-color 0.25s var(--ease);
+}
+.switch::after {
+  content: ""; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%;
+  background: #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3); transition: transform 0.3s var(--spring);
+}
+.switch[aria-checked="true"] { background: var(--ok); }
+.switch[aria-checked="true"]::after { transform: translateX(20px); }
+
+/* ------------------------------------------------------------- Developer view */
+
+.dev-panel {
+  position: fixed; inset: 0; z-index: 70; background: var(--bg); overflow-y: auto; overscroll-behavior: contain;
+  padding: calc(var(--safe-top) + 10px) var(--gutter) calc(var(--safe-bottom) + 40px);
+  animation: page-in 0.3s var(--ease) backwards;
+}
+.dev-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.dev-head h3 { margin: 0; font-size: 28px; font-weight: 700; }
+.dev-panel .sub-h { font-size: 13px; font-weight: 600; color: var(--label-2); text-transform: uppercase; letter-spacing: 0.04em; margin: 26px 4px 8px; }
+.dev-panel .hint { color: var(--label-2); font-size: 14px; line-height: 1.45; margin: 0 4px 12px; }
+.dev-panel .actions { display: flex; gap: 10px; margin-top: 14px; }
+.dev-panel .actions .btn { flex: 1; }
+.dev-panel details { border-bottom: 0.5px solid var(--sep); }
+.dev-panel summary {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 13px 4px;
+  font-size: 15px; cursor: pointer; list-style: none;
+}
+.dev-panel summary::-webkit-details-marker { display: none; }
+.dev-panel summary::before { content: "›"; color: var(--label-3); margin-right: 8px; display: inline-block; transition: transform 0.2s var(--ease); }
+.dev-panel details[open] > summary::before { transform: rotate(90deg); }
+.dev-panel summary small { margin-left: auto; color: var(--label-3); font-size: 13px; }
+.dev-panel pre, .field.mono { font: 12px/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+.dev-panel pre {
+  margin: 0 0 14px; padding: 12px; border-radius: 12px; background: var(--bg-elev); color: var(--label-2);
+  white-space: pre-wrap; overflow-wrap: anywhere; max-height: 340px; overflow: auto; user-select: text; -webkit-user-select: text;
+}
+.dev-panel .dev-edit { border-bottom: 0; }
+.dev-note { padding: 10px 12px; border-radius: 12px; background: var(--bg-elev); color: var(--label-2); font-size: 14px; line-height: 1.4; margin-bottom: 6px; overflow-wrap: anywhere; }
+.dev-note.err { color: var(--accent); background: var(--accent-soft); }
+.cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px; line-height: 1.4; }
+.cmp > div { padding: 10px; border-radius: 12px; background: var(--bg-elev); min-width: 0; overflow-wrap: anywhere; }
+.cmp > div > div + div { margin-top: 5px; }
+.cmp b { display: block; margin: 6px 0 2px; }
+.cmp small { color: var(--label-3); }
+.cmp.cols > div { background: none; padding: 0 10px; font-weight: 600; color: var(--label-2); }
+.cmp-k { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--label-3); margin: 14px 4px 6px; }
+.cmp-k.diff { color: var(--accent); }
+@media (min-width: 1000px) {
+  .dev-panel { left: auto; width: 460px; z-index: 28; background: #0c0c0e; border-left: 0.5px solid var(--sep); animation: none; }
+  body.dev-open .detail { margin-right: 460px; }
+  body.dev-open .nav-float, body.dev-open .nav-bar { right: 460px; }
+}
 
 #toast {
   position: fixed; left: 50%; top: calc(var(--safe-top) + 10px); z-index: 80;
