@@ -216,6 +216,8 @@ ok(s == 200 and {k: rep.get(k, {}).get("items") for k in ("ah", "jumbo", "lidl",
 ok(all(rep[k]["found"] >= rep[k]["items"] for k in rep) and rep["dirk"]["valid_from"] <= _today <= rep["dirk"]["valid_to"], f"report has counts and the period {rep.get('dirk')}")
 s, d, _ = req("GET", "/api/recipes/discounts"); ok(s == 200 and sorted(d["stores"]) == ["ah", "dirk", "jumbo", "lidl"], f"all four active {sorted(d.get('stores', {}))}")
 ok(a["id"] in d["recipes"] and d["recipes"][a["id"]]["lines"]["0.0"]["offers"][0]["store"] == "dirk" and d["recipes"][a["id"]]["lines"]["0.0"]["offers"][0]["price"] == "€5.49", f"a chicken thigh recipe is on offer at Dirk {d['recipes'].get(a['id'])}")
+s, r, _ = req("POST", "/api/services/recipes/status?return_response", {"limit": 50}); st2 = r.get("service_response", {})
+ok(sorted(st2.get("discounts", {}).get("stores", {})) == ["ah", "dirk", "jumbo", "lidl"] and st2["discounts"]["recipes_on_offer"] >= 1 and any(x["on_offer"] for x in st2["recipes"]), f"status shows the offers and the recipes on offer {st2.get('discounts')}")
 s, r, _ = refresh({"test_base": FIX + "/offers"}); rep2 = r["service_response"]
 ok(all(v.get("skipped") for v in rep2.values()), f"a fresh list is not fetched again {rep2}")
 s, r, _ = refresh({"store": ["dirk"], "force": True, "test_base": FIX + "/offers"}); ok(s == 200 and r["service_response"]["dirk"]["items"] == 4 and list(r["service_response"]) == ["dirk"], "force fetches again, only the asked store")

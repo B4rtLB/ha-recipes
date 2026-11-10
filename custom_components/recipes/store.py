@@ -47,6 +47,7 @@ class DiscountStore:
         """Initialize the store."""
         self._store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, DISCOUNTS_STORAGE_KEY)
         self.data: dict[str, Any] = {"updated": None, "stores": {}}
+        self.lock = asyncio.Lock()  # one offers refresh at a time
 
     async def async_load(self) -> None:
         """Load from disk."""

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 import hashlib
 import logging
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from homeassistant.components import webhook
 from homeassistant.components.http import StaticPathConfig
@@ -91,9 +93,19 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
                 "created": r.get("created"),
                 "updated": r.get("updated"),
             }
+        today = datetime.now(ZoneInfo("Europe/Amsterdam")).date().isoformat()
+        active = discounts.active_stores(data.store.discounts.data, today)
+        on_offer = discounts.match_all(recipes, active)
         return {
             "webhook_path": f"/api/webhook/{data.entry.data[CONF_WEBHOOK_ID]}",
             "count": len(recipes),
+            "discounts": {
+                "stores": {
+                    k: {"items": len(e["items"]), "valid_from": e["valid_from"], "valid_to": e["valid_to"], "fetched": e.get("fetched")}
+                    for k, e in active.items()
+                },
+                "recipes_on_offer": len(on_offer),
+            },
             "recipes": [
                 {
                     "id": r["id"],
@@ -108,6 +120,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
                     "steps": len(r.get("steps") or []),
                     "total_min": r.get("total_min"),
                     "tags": r.get("tags"),
+                    "on_offer": (on_offer.get(r["id"]) or {}).get("count", 0),
                     "notes": r.get("pipeline_notes"),
                 }
                 for r in recipes[: call.data.get("limit", 20)]

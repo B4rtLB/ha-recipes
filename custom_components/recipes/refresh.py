@@ -73,7 +73,14 @@ async def refresh_discounts(
 
     A store that fails keeps its old list; one failing shop never touches the others.
     """
-    options = data.processor.options
+    lock = data.store.discounts.lock
+    if lock.locked():
+        return {"busy": "an offers refresh is already running"}
+    async with lock:
+        return await _locked_refresh(hass, data, stores, force, test_base)
+
+
+async def _locked_refresh(hass, data, stores, force, test_base) -> dict[str, Any]:
     # Lidl sends a security header larger than aiohttp's default 8 KB limit
     session = async_create_clientsession(hass, max_line_size=65536, max_field_size=65536)
     try:
