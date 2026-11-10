@@ -185,7 +185,8 @@ class AppIndexView(HomeAssistantView):
         if request.path == URL_APP:
             raise web.HTTPFound(f"{URL_APP}/")
         html = await hass.async_add_executor_job((FRONTEND / "index.html").read_text)
-        html = html.replace("__VERSION__", _data(hass).asset_version)
+        data = hass.data.get(DOMAIN)  # not there yet while HA is still starting
+        html = html.replace("__VERSION__", data.asset_version if data else "starting")
         return web.Response(
             text=html, content_type="text/html",
             headers={"Cache-Control": "no-cache", "X-Frame-Options": "SAMEORIGIN"},
@@ -203,7 +204,10 @@ class ServiceWorkerView(HomeAssistantView):
         """Return sw.js."""
         hass: HomeAssistant = request.app["hass"]
         js = await hass.async_add_executor_job((FRONTEND / "sw.js").read_text)
-        js = js.replace("__VERSION__", _data(hass).asset_version)
+        data = hass.data.get(DOMAIN)
+        if data is None:
+            raise web.HTTPServiceUnavailable
+        js = js.replace("__VERSION__", data.asset_version)
         return web.Response(
             text=js, content_type="application/javascript",
             headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": f"{URL_APP}/"},

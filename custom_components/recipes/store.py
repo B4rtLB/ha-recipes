@@ -50,6 +50,15 @@ class RecipeStore:
         """Load recipes from disk."""
         data = await self._store.async_load()
         self.recipes = (data or {}).get("recipes", {})
+        # One-off cleanup: "Quick" means ready in 30 minutes or less.
+        changed = False
+        for recipe in self.recipes.values():
+            tags = recipe.get("tags") or []
+            if "Quick" in tags and (recipe.get("total_min") or 0) > 30:
+                tags.remove("Quick")
+                changed = True
+        if changed:
+            self._schedule_save()
         await self.hass.async_add_executor_job(self.root.mkdir, 0o755, True, True)
 
     @callback
