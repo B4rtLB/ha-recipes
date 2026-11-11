@@ -7,7 +7,6 @@ VERSION = "0.1.0"
 
 STORAGE_KEY = "recipes.recipes"
 STORAGE_VERSION = 1
-DISCOUNTS_STORAGE_KEY = "recipes.discounts"
 
 CONF_AI_TASK_ENTITY = "ai_task_entity"
 CONF_STT_ENTITY = "stt_entity"
@@ -17,7 +16,6 @@ CONF_TRANSCRIBE = "transcribe"
 CONF_WEBHOOK_ID = "webhook_id"
 CONF_TODO_ENTITY = "todo_entity"
 CONF_EXTRACTION_MODE = "extraction_mode"
-CONF_AUTO_DISCOUNTS = "auto_discounts"
 
 # "classic": the AI does everything (best with a large model such as OpenAI).
 # "lean": the AI only returns raw strings; preprocessing, the parser and the JSON-LD

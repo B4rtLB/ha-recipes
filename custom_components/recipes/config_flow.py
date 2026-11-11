@@ -19,7 +19,6 @@ from homeassistant.helpers import selector
 
 from .const import (
     CONF_AI_TASK_ENTITY,
-    CONF_AUTO_DISCOUNTS,
     CONF_EXTRACTION_MODE,
     CONF_LANGUAGE,
     CONF_NOTIFY_SERVICE,
@@ -61,7 +60,6 @@ def _schema(hass, defaults: dict[str, Any]) -> vol.Schema:
             mode=selector.SelectSelectorMode.DROPDOWN,
         )
     )
-    fields[vol.Required(CONF_AUTO_DISCOUNTS, default=defaults.get(CONF_AUTO_DISCOUNTS, True))] = selector.BooleanSelector()
     fields[vol.Required(CONF_TRANSCRIBE, default=defaults.get(CONF_TRANSCRIBE, True))] = selector.BooleanSelector()
     todo_default = defaults.get(CONF_TODO_ENTITY) or (
         "todo.shopping_list" if hass.states.get("todo.shopping_list") else None

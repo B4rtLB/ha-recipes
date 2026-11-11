@@ -167,68 +167,6 @@ ok(s == 200 and x["mode"] == "lean" and x["shortcut"] == "jsonld", f"re-run foll
 s, x, _ = req("POST", f"/api/recipes/{lj['id']}/debug/rerun", {"mode": "bogus"}); ok(s == 400, f"bad mode in re-run {s}")
 s, r, _ = req("POST", "/api/recipes/settings", {"options": {"extraction_mode": "classic"}}); ok(r["options"]["extraction_mode"] == "classic", "back to classic")
 for rid in (lj["id"], lv["id"]): req("DELETE", f"/api/recipes/{rid}")
-# discounts: storage, matching, expiry, per-store replace, admin-only (all invented data)
-import datetime
-day = lambda n: (datetime.date.today() + datetime.timedelta(days=n)).isoformat()
-for k in ("ah", "jumbo", "lidl", "dirk"): req("DELETE", f"/api/recipes/discounts/{k}")
-s, d, _ = req("GET", "/api/recipes/discounts"); ok(s == 200 and d["stores"] == {} and d["recipes"] == {}, f"no discounts yet {d}")
-ing = a["ingredient_groups"][0]["items"][0]["name"]
-s, r, _ = req("PUT", "/api/recipes/discounts/ah", {"valid_from": day(-1), "valid_to": day(6), "items": [{"name": "Invented offer", "terms": ["zzz nothing", ing], "price": "€1.99", "was": "€2.99", "note": "test"}]}); ok(s == 200 and r["items"] == 1, f"PUT ah {s} {r}")
-s, d, _ = req("GET", "/api/recipes/discounts")
-ok(list(d["stores"]) == ["ah"] and d["stores"]["ah"]["count"] == 1 and d["updated"], f"active store listed {d['stores']}")
-ok(a["id"] in d["recipes"] and d["recipes"][a["id"]]["lines"]["0.0"]["best"] == "ah" and d["recipes"][a["id"]]["count"] >= 1, f"recipe matched server-side {d['recipes'].get(a['id'])}")
-s, full, _ = req("GET", f"/api/recipes/{a['id']}")
-off = full["offers"]["0.0"]
-ok(off["offers"][0]["price"] == "€1.99" and off["offers"][0]["was"] == "€2.99" and off["offers"][0]["note"] == "test", f"recipe detail lists the offer lines {off}")
-s, r, _ = req("PUT", "/api/recipes/discounts/jumbo", {"valid_from": day(-1), "valid_to": day(6), "items": [{"name": "Other", "terms": ["zzz other"]}]}); ok(s == 200, "PUT jumbo")
-s, r, _ = req("PUT", "/api/recipes/discounts/ah", {"valid_from": day(-1), "valid_to": day(6), "items": [{"name": "Not for this recipe", "terms": ["zzz nothing at all"]}]})
-s, d, _ = req("GET", "/api/recipes/discounts")
-ok(sorted(d["stores"]) == ["ah", "jumbo"] and d["stores"]["jumbo"]["count"] == 1 and a["id"] not in d["recipes"], f"replacing ah left jumbo alone and dropped the match {sorted(d['stores'])}")
-s, r, _ = req("PUT", "/api/recipes/discounts/lidl", {"valid_from": day(-9), "valid_to": day(-2), "items": [{"name": "Old", "terms": [ing]}]}); ok(s == 200, "PUT lidl (already expired)")
-s, d, _ = req("GET", "/api/recipes/discounts"); ok("lidl" not in d["stores"] and a["id"] not in d["recipes"], f"expired list counts as none {sorted(d['stores'])}")
-s, r, _ = req("PUT", "/api/recipes/discounts/lidl", {"valid_from": day(0), "valid_to": day(0), "items": [{"name": "Today only", "terms": [ing]}]})
-s, d, _ = req("GET", "/api/recipes/discounts"); ok("lidl" in d["stores"] and a["id"] in d["recipes"], "a list valid for today only is active")
-for body, why in (({"valid_from": "soon", "valid_to": day(1), "items": []}, "bad date"), ({"valid_from": day(2), "valid_to": day(1), "items": []}, "end before start"), ({"valid_from": day(0), "valid_to": day(1), "items": [{"terms": ["x"]}]}, "item without name")):
-    s, _, _ = req("PUT", "/api/recipes/discounts/ah", body); ok(s == 400, f"PUT rejects {why} {s}")
-s, _, _ = req("PUT", "/api/recipes/discounts/spar", {"valid_from": day(0), "valid_to": day(1), "items": []}); ok(s == 400, "PUT rejects an unknown store")
-s, _, _ = req("PUT", "/api/recipes/discounts/ah", {"valid_from": day(0), "valid_to": day(1), "items": []}, auth=False); ok(s == 401, "PUT needs a token")
-viewer = subprocess.run([str(DEV / ".venv/bin/python"), str(DEV / "mkuser.py")], capture_output=True, text=True, cwd=DEV).stdout.strip()
-vh = {"Authorization": "Bearer " + viewer}
-s, _, _ = req("PUT", "/api/recipes/discounts/ah", {"valid_from": day(0), "valid_to": day(1), "items": []}, headers=vh, auth=False); ok(s == 403, f"PUT is admin only {s}")
-s, _, _ = req("DELETE", "/api/recipes/discounts/ah", headers=vh, auth=False); ok(s == 403, "DELETE is admin only")
-s, d, _ = req("GET", "/api/recipes/discounts", headers=vh, auth=False); ok(s == 200 and "ah" in d["stores"], "any signed-in user can read discounts")
-s, _, _ = req("POST", "/api/services/recipes/set_discounts", {"store": "dirk", "valid_from": day(-1), "valid_to": day(3), "items": [{"name": "Via service", "terms": [ing]}]}); ok(s == 200, f"service set_discounts {s}")
-s, d, _ = req("GET", "/api/recipes/discounts"); ok("dirk" in d["stores"] and d["recipes"][a["id"]]["lines"]["0.0"]["offers"][-1]["store"] == "dirk", "service fed dirk, others kept")
-s, _, _ = req("POST", "/api/services/recipes/set_discounts", {"store": "dirk", "valid_from": day(3), "valid_to": day(-1), "items": []}); ok(s >= 400, f"service rejects bad dates {s}")
-for k in ("ah", "jumbo", "lidl", "dirk"): req("DELETE", f"/api/recipes/discounts/{k}")
-s, d, _ = req("GET", "/api/recipes/discounts"); ok(d["stores"] == {}, "discounts cleaned up")
-# N weekly offers: invented shop pages through the real fetch, parse, search words and store path
-import datetime as _dt
-import offer_fixtures
-_today = _dt.date.today().isoformat()
-offer_fixtures.write(DEV / "fixtures" / "offers", _today)
-for k in ("ah", "jumbo", "lidl", "dirk"): req("DELETE", f"/api/recipes/discounts/{k}")
-def refresh(body):
-    return req("POST", "/api/services/recipes/refresh_discounts?return_response", body)
-s, r, _ = refresh({"force": True, "test_base": "http://example.com/offers"}); ok(s == 400, f"test_base must be this machine {s}")
-s, r, _ = refresh({"test_base": FIX + "/offers"}); rep = r.get("service_response", {}) if s == 200 else {}
-ok(s == 200 and {k: rep.get(k, {}).get("items") for k in ("ah", "jumbo", "lidl", "dirk")} == {"ah": 2, "jumbo": 3, "lidl": 2, "dirk": 4}, f"refresh fetched the four shops {s} {rep}")
-ok(all(rep[k]["found"] >= rep[k]["items"] for k in rep) and rep["dirk"]["valid_from"] <= _today <= rep["dirk"]["valid_to"], f"report has counts and the period {rep.get('dirk')}")
-s, d, _ = req("GET", "/api/recipes/discounts"); ok(s == 200 and sorted(d["stores"]) == ["ah", "dirk", "jumbo", "lidl"], f"all four active {sorted(d.get('stores', {}))}")
-ok(a["id"] in d["recipes"] and d["recipes"][a["id"]]["lines"]["0.0"]["offers"][0]["store"] == "dirk" and d["recipes"][a["id"]]["lines"]["0.0"]["offers"][0]["price"] == "€5.49", f"a chicken thigh recipe is on offer at Dirk {d['recipes'].get(a['id'])}")
-s, r, _ = req("POST", "/api/services/recipes/status?return_response", {"limit": 50}); st2 = r.get("service_response", {})
-ok(sorted(st2.get("discounts", {}).get("stores", {})) == ["ah", "dirk", "jumbo", "lidl"] and st2["discounts"]["recipes_on_offer"] >= 1 and any(x["on_offer"] for x in st2["recipes"]), f"status shows the offers and the recipes on offer {st2.get('discounts')}")
-s, r, _ = req("POST", "/api/services/recipes/status?return_response", {"id": a["id"], "only": "offers"}); one = r.get("service_response", {})
-ok(any(o["best"] == "dirk" and o["ingredient"] and o["offers"][0][1] == "Kippendijfilet" for o in one.get("offers", [])), f"status of one recipe lists its offers {one.get('offers')}")
-s, r, _ = refresh({"test_base": FIX + "/offers"}); rep2 = r["service_response"]
-ok(all(v.get("skipped") for v in rep2.values()), f"a fresh list is not fetched again {rep2}")
-s, r, _ = refresh({"store": ["dirk"], "force": True, "test_base": FIX + "/offers"}); ok(s == 200 and r["service_response"]["dirk"]["items"] == 4 and list(r["service_response"]) == ["dirk"], "force fetches again, only the asked store")
-s, _, _ = req("POST", "/api/services/recipes/set_discounts", {"store": "lidl", "valid_from": _today, "valid_to": _today, "items": [{"name": "By hand", "terms": ["zzz hand"]}]})
-s, r, _ = refresh({"store": ["lidl"], "test_base": FIX + "/offers"}); ok(r["service_response"]["lidl"].get("skipped"), "a list fed by hand is left alone while it runs")
-s, d, _ = req("GET", "/api/recipes/discounts"); ok(d["stores"]["lidl"]["count"] == 1 and d["stores"]["jumbo"]["count"] == 3, f"hand list kept, others untouched {d['stores']['lidl']['count']}")
-s, r, _ = refresh({"store": ["jumbo"], "force": True, "test_base": FIX + "/offers-missing"}); ok(s == 200 and "error" in r["service_response"]["jumbo"], f"a broken shop reports an error {r.get('service_response')}")
-s, d, _ = req("GET", "/api/recipes/discounts"); ok(d["stores"]["jumbo"]["count"] == 3, "and keeps its old list")
-for k in ("ah", "jumbo", "lidl", "dirk"): req("DELETE", f"/api/recipes/discounts/{k}")
 # app shell
 s, html, _ = req("GET", "/recipes/", auth=False, raw=True); ok(s == 200 and b"app.js?v=" in html and b"__VERSION__" not in html, "index served")
 s, js, h = req("GET", "/recipes/sw.js", auth=False, raw=True); ok(s == 200 and h.get("Service-Worker-Allowed") == "/recipes/", "sw headers")

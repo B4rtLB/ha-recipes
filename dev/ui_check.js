@@ -167,7 +167,7 @@ const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails.p
       snap: getComputedStyle(row).scrollSnapType,
       titles: [...row.querySelectorAll('.card-title')].map((e) => e.textContent), dis: row.querySelectorAll('[aria-disabled="true"]').length };
   });
-  ok(pl.n === 3 && pl.titles.join() === 'Shuffle,Bonus,Playlist 3' && pl.dis === 2, `three playlist tiles ${pl.titles}`);
+  ok(pl.n === 2 && pl.titles.join() === 'Shuffle,Playlist 3' && pl.dis === 1, `two playlist tiles ${pl.titles}`);
   ok(pl.ord, 'row sits between chips and grid');
   ok(pl.snap.startsWith('x'), `row snaps horizontally (${pl.snap})`);
   await shot('12-playlists');
@@ -242,51 +242,6 @@ const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails.p
   await page.evaluate(() => { location.hash = '#/'; });
   await page.waitForSelector('.pl-row');
 
-  // Bonus playlist + highlights (invented discounts, fed through the admin API)
-  ok(await page.$eval('[data-pl-off="bonus"] .card-sub', (e) => e.textContent) === 'No offers yet', 'Bonus is disabled without offers');
-  await shot('15-bonus-disabled');
-  const feed = (store, items) => page.evaluate(async ([store, items]) => {
-    const t = JSON.parse(localStorage.getItem('recipes.auth')).access;
-    const day = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
-    const r = await fetch('/api/recipes/discounts/' + store, { method: 'PUT', headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ valid_from: day(-1), valid_to: day(6), items }) });
-    return r.status;
-  }, [store, items]);
-  ok(await feed('ah', [{ name: 'Kippendij', terms: ['kippendij', 'chicken thigh'], price: '€5.49', was: '€6.99', note: 'invented offer' },
-    { name: 'Knoflook', terms: ['garlic'], price: '€0.99' }, { name: 'Chilivlokken', terms: ['chili flakes'] }, { name: 'Kokosmelk', terms: ['coconut milk'], price: '€1.19' }]) === 200, 'discounts fed (ah)');
-  ok(await feed('jumbo', [{ name: 'Chicken thigh fillet', terms: ['chicken thigh'], price: '€4.89' }]) === 200, 'discounts fed (jumbo)');
-  ok(await feed('lidl', [{ name: 'Kippendij', terms: ['chicken thigh'], price: '€5.99' }]) === 200, 'discounts fed (lidl)');
-  ok(await feed('dirk', [{ name: 'Kippendij', terms: ['chicken thigh'], price: '€6.19' }]) === 200, 'discounts fed (dirk)');
-  await page.reload();
-  await page.waitForSelector('.pl-row');
-  const onOffer = await page.evaluate(async () => {
-    const t = JSON.parse(localStorage.getItem('recipes.auth')).access;
-    const d = await (await fetch('/api/recipes/discounts', { headers: { Authorization: 'Bearer ' + t } })).json();
-    return Object.values(d.recipes).filter((x) => x.count >= 4).length; // the app's Bonus bar
-  });
-  const bsub = await page.$eval('[data-pl="bonus"] .card-sub', (e) => e.textContent);
-  ok(onOffer > 0 && bsub === `${onOffer} recipe${onOffer === 1 ? '' : 's'} on offer`, `Bonus card count: ${bsub}`);
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await page.waitForTimeout(500);
-  await shot('16-bonus-enabled');
-  await page.click('[data-pl="bonus"]');
-  await page.waitForSelector('.detail.shuffling .deal');
-  await page.waitForTimeout(800);
-  const glow = await page.evaluate(() => {
-    const li = document.querySelector('.ing.deal');
-    return { cls: li.className, bg: getComputedStyle(li).backgroundImage, shadow: getComputedStyle(li.querySelector('.txt')).textShadow,
-      pills: [...li.querySelectorAll('.deal-pill')].map((p) => p.textContent.trim()), dots: [...li.querySelectorAll('.deal-pill i')].map((i) => getComputedStyle(i).backgroundColor) };
-  });
-  ok(glow.cls.includes('deal-jumbo'), `glow in the cheapest store (${glow.cls})`);
-  ok(glow.bg !== 'none' && glow.shadow !== 'none', 'ingredient has a glow');
-  ok(glow.pills.length === 4 && glow.pills[0].startsWith('AH') && glow.pills[1].startsWith('Jumbo') && glow.pills[2].startsWith('Lidl') && glow.pills[3].startsWith('Dirk'), `store names next to the dots ${glow.pills.map((p) => p.slice(0, 14))}`);
-  ok(new Set(glow.dots).size === 4, `four store colours ${glow.dots}`);
-  await page.locator('.ing.deal').first().scrollIntoViewIfNeeded();
-  await page.waitForTimeout(300);
-  await shot('17-ingredient-highlight');
-  await page.evaluate(() => { location.hash = '#/'; });
-  await page.waitForSelector('.pl-row');
-
   // shuffle respects the filter chips
   const fchip = (await page.$$eval('[data-chip]', (b) => b.map((x) => x.dataset.chip).filter(Boolean)))[0];
   if (fchip) {
@@ -308,7 +263,7 @@ const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails.p
   wp.on('pageerror', (e) => errors.push(String(e)));
   await wp.goto('/recipes/');
   await wp.waitForSelector('.grid .card');
-  ok((await wp.$$('.pl-row .pl-card')).length === 3, 'playlist row on the wide screen');
+  ok((await wp.$$('.pl-row .pl-card')).length === 2, 'playlist row on the wide screen');
   await wp.screenshot({ path: path.join(out, '9-wide-library.png') });
   await wp.locator('.card:has(.badge)').first().click();
   await wp.waitForSelector('.dev-panel #dev-run');
@@ -320,10 +275,6 @@ const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails.p
   await wp.waitForTimeout(600);
   await wp.screenshot({ path: path.join(out, '11-wide-sheet.png') });
 
-  await page.evaluate(async () => {
-    const t = JSON.parse(localStorage.getItem('recipes.auth')).access;
-    for (const k of ['ah', 'jumbo', 'lidl', 'dirk']) await fetch('/api/recipes/discounts/' + k, { method: 'DELETE', headers: { Authorization: 'Bearer ' + t } });
-  });
   ok(errors.length === 0, `no page errors ${errors}`);
   await browser.close();
   console.log('Screenshots in', out);

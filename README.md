@@ -29,10 +29,6 @@ Open `https://<your-home-assistant>/recipes/` in Safari → Share → **Add to H
    - **Save Recipe** – in the share sheet of TikTok, Instagram, Safari and Photos. Sends the link/photo/PDF to the Recipes webhook.
    - **Recipe Timer** – started by the app's timer buttons; starts a Clock timer.
 
-### Weekly supermarket offers
-
-Recipes whose ingredients are on offer at Albert Heijn, Jumbo, Lidl or Dirk get a glow in the store's colour and show up in the **Bonus** playlist. The offers are fetched automatically (option *Refresh the weekly supermarket offers automatically*, on by default) from the shops' public offer pages, about once a week, and search words come from your AI Task. Service `recipes.refresh_discounts` fetches now (`force: true` to ignore freshness); `recipes.set_discounts` feeds a list by hand.
-
 ## API
 
 All endpoints need a Home Assistant token, except the webhook and the app shell.
@@ -44,28 +40,8 @@ All endpoints need a Home Assistant token, except the webhook and the app shell.
 | POST | `/api/recipes/{id}/retry` | process again |
 | POST | `/api/recipes/{id}/shopping` | add `{"items": [...]}` to the to-do list |
 | GET/POST | `/api/recipes/settings` | status / Instagram cookies (admin) |
-| GET | `/api/recipes/discounts` | active supermarket discounts and, per recipe id, the discounted ingredient lines |
-| PUT/DELETE | `/api/recipes/discounts/{store}` | replace / clear one supermarket (`ah`, `jumbo`, `lidl`, `dirk`) with `{"valid_from", "valid_to", "items": [{"name", "terms", "price", "was", "note"}]}` (admin) |
 | POST | `/api/webhook/{webhook_id}` | share-sheet endpoint (JSON, form, or raw image/PDF body) |
 
-Services: `recipes.add` with `url`; `recipes.set_discounts` with `store`, `valid_from`, `valid_to`, `items` (feed it from an automation or script, see below).
-
-### Discounts
-
-The **Bonus** playlist and the ingredient highlights come from this week's supermarket offers, kept in their own store (`.storage/recipes.discounts`). Each supermarket is replaced on its own and is only active between `valid_from` and `valid_to` (Europe/Amsterdam date). Recipes are in English but supermarkets are Dutch, so every item carries `terms`: Dutch and English keywords. An ingredient matches when all words of one term appear in its name (plurals and accents are ignored), so use specific terms (`chicken breast`, not `chicken`).
-
-```yaml
-service: recipes.set_discounts
-data:
-  store: ah
-  valid_from: "2026-11-09"
-  valid_to: "2026-11-15"
-  items:
-    - name: Chicken breast
-      terms: [kipfilet, chicken breast, chicken fillet]
-      price: "€4.99"
-      was: "€6.49"
-      note: 2nd half price
-```
+Services: `recipes.add` with `url`.
 
 Media lives in `/media/recipes/<id>/` (outside the config folder, so it does not bloat config backups).

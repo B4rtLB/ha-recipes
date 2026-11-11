@@ -3,26 +3,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
 import hashlib
 import logging
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 from homeassistant.components import webhook
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.exceptions import ServiceValidationError
 from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse
 import voluptuous as vol
 
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.event import async_call_later, async_track_time_change
 
-from . import discounts, sources
-from .const import CONF_AUTO_DISCOUNTS, CONF_WEBHOOK_ID, DOMAIN, URL_STATIC
+from . import sources
+from .const import CONF_WEBHOOK_ID, DOMAIN, URL_STATIC
 from .pipeline import RecipeProcessor, new_recipe_from_payload
-from .refresh import refresh_discounts
 from .store import RecipeStore
 from .views import FRONTEND, handle_webhook, register_views
 
@@ -76,22 +71,11 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         if data is None:
             raise vol.Invalid("Recipes is not set up")
         recipes = sorted(data.store.recipes.values(), key=lambda r: r.get("created") or "", reverse=True)
-        today = datetime.now(ZoneInfo("Europe/Amsterdam")).date().isoformat()
-        active = discounts.active_stores(data.store.discounts.data, today)
         if call.data.get("id"):
             r = data.store.recipes.get(call.data["id"])
             if r is None:
                 raise vol.Invalid("Unknown recipe")
-            lines = discounts.match_recipe(r, active)
-            names = {f"{gi}.{ii}": i.get("name") for gi, g in enumerate(r.get("ingredient_groups") or []) for ii, i in enumerate(g.get("items") or [])}
-            offers = [
-                {"ingredient": names.get(key), "best": line["best"], "offers": [[o["store"], o["item"], o.get("price")] for o in line["offers"]]}
-                for key, line in lines.items()
-            ]
-            if call.data.get("only") == "offers":
-                return {"id": r["id"], "title": r.get("title"), "ingredients": len(names), "offers": offers}
             return {
-                "offers": offers,
                 "id": r["id"],
                 "title": r.get("title"),
                 "status": r.get("status"),
@@ -104,17 +88,9 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
                 "created": r.get("created"),
                 "updated": r.get("updated"),
             }
-        on_offer = discounts.match_all(recipes, active)
         return {
             "webhook_path": f"/api/webhook/{data.entry.data[CONF_WEBHOOK_ID]}",
             "count": len(recipes),
-            "discounts": {
-                "stores": {
-                    k: {"items": len(e["items"]), "valid_from": e["valid_from"], "valid_to": e["valid_to"], "fetched": e.get("fetched")}
-                    for k, e in active.items()
-                },
-                "recipes_on_offer": len(on_offer),
-            },
             "recipes": [
                 {
                     "id": r["id"],
@@ -129,7 +105,6 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
                     "steps": len(r.get("steps") or []),
                     "total_min": r.get("total_min"),
                     "tags": r.get("tags"),
-                    "on_offer": (on_offer.get(r["id"]) or {}).get("count", 0),
                     "notes": r.get("pipeline_notes"),
                 }
                 for r in recipes[: call.data.get("limit", 20)]
@@ -153,51 +128,6 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             if rid in data.store.recipes:
                 data.processor.enqueue(rid)
 
-    async def set_discounts(call: ServiceCall) -> None:
-        data: RecipesData | None = hass.data.get(DOMAIN)
-        if data is None:
-            raise vol.Invalid("Recipes is not set up")
-        try:
-            entry = discounts.clean_store(
-                call.data["store"], call.data["valid_from"], call.data["valid_to"], call.data["items"]
-            )
-        except ValueError as err:
-            raise ServiceValidationError(str(err)) from err
-        data.store.discounts.set_store(call.data["store"], entry)
-
-    hass.services.async_register(
-        DOMAIN,
-        "set_discounts",
-        set_discounts,
-        schema=vol.Schema({
-            vol.Required("store"): vol.In(list(discounts.STORES)),
-            vol.Required("valid_from"): cv.date,
-            vol.Required("valid_to"): cv.date,
-            vol.Required("items"): list,
-        }),
-    )
-    async def refresh_offers(call: ServiceCall) -> ServiceResponse:
-        data: RecipesData | None = hass.data.get(DOMAIN)
-        if data is None:
-            raise vol.Invalid("Recipes is not set up")
-        try:
-            return await refresh_discounts(
-                hass, data, call.data.get("store"), force=call.data["force"], test_base=call.data.get("test_base")
-            )
-        except ValueError as err:
-            raise ServiceValidationError(str(err)) from err
-
-    hass.services.async_register(
-        DOMAIN,
-        "refresh_discounts",
-        refresh_offers,
-        schema=vol.Schema({
-            vol.Optional("store"): vol.All(cv.ensure_list, [vol.In(list(discounts.STORES))]),
-            vol.Optional("force", default=False): cv.boolean,
-            vol.Optional("test_base"): cv.string,
-        }),
-        supports_response=SupportsResponse.OPTIONAL,
-    )
     hass.services.async_register(DOMAIN, "delete", delete, schema=vol.Schema({vol.Required("id"): cv.string}))
     hass.services.async_register(DOMAIN, "retry", retry, schema=vol.Schema({vol.Optional("id"): cv.string}))
 
@@ -208,7 +138,6 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         schema=vol.Schema({
             vol.Optional("limit", default=20): vol.All(int, vol.Range(min=1, max=500)),
             vol.Optional("id"): cv.string,
-            vol.Optional("only"): vol.In(["offers"]),
         }),
         supports_response=SupportsResponse.ONLY,
     )
@@ -237,18 +166,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     processor.start()
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
-
-    async def auto_refresh(_now=None) -> None:
-        """Fetch the weekly offers of the shops whose list is missing, ended or old (see refresh.py)."""
-        current: RecipesData | None = hass.data.get(DOMAIN)
-        if current and current.processor.options.get(CONF_AUTO_DISCOUNTS, True):
-            try:
-                await refresh_discounts(hass, current)
-            except Exception:  # noqa: BLE001 - never let the schedule die
-                _LOGGER.exception("Automatic offers refresh failed")
-
-    entry.async_on_unload(async_track_time_change(hass, auto_refresh, hour=6, minute=15, second=0))
-    entry.async_on_unload(async_call_later(hass, 180, auto_refresh))
     return True
 
 

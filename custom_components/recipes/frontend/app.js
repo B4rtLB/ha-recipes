@@ -191,7 +191,6 @@ const state = {
   search: "",
   searching: false,
   current: null,
-  discounts: null, // {stores, recipes}: this week's offers, matched server-side
   shuffle: null, // {pool, queue, last, busy}: set while a shuffle session runs
   admin: false,
 };
@@ -229,7 +228,6 @@ const ScrollLock = {
 async function loadList() {
   const data = await api("");
   state.recipes = data.recipes;
-  await loadDiscounts();
   schedulePoll();
   return state.recipes;
 }
@@ -372,30 +370,11 @@ async function renderLibrary(fetch_ = true) {
 
 // ------------------------------------------------------------------ playlists
 // A row of tiles between the filter chips and the grid. Shuffle opens a random
-// recipe (of the filtered list) and starts a session; Bonus does the same over
-// the recipes with ingredients on offer this week. In a session a swipe from
+// recipe (of the filtered list) and starts a session. In a session a swipe from
 // right to left goes forward (through the history, then on to a new random
-// recipe), a swipe from left to right goes back through the last 5. The third
+// recipe), a swipe from left to right goes back through the last 5. The other
 // tile is a placeholder.
 const HISTORY = 5; // how many recipes you can go back
-
-const STORE_SHORT = { ah: "AH", jumbo: "Jumbo", lidl: "Lidl", dirk: "Dirk" };
-const STORE_NAME = { ah: "Albert Heijn", jumbo: "Jumbo", lidl: "Lidl", dirk: "Dirk" };
-
-async function loadDiscounts() {
-  try { state.discounts = await api("/discounts"); } catch { state.discounts = state.discounts || null; }
-}
-
-// Recipes (ready) with at least BONUS_MIN ingredient lines on offer, most offers first. Four shops
-// have hundreds of offers a week, so nearly every recipe has one or two lines on offer; the Bonus
-// playlist is for the ones where a real part of the shopping is cheaper.
-const BONUS_MIN = 4;
-function bonusRecipes() {
-  const d = state.discounts;
-  if (!d || !Object.keys(d.stores || {}).length) return [];
-  return (state.recipes || []).filter((r) => r.status === "ready" && (d.recipes?.[r.id]?.count || 0) >= BONUS_MIN)
-    .sort((a, b) => d.recipes[b.id].count - d.recipes[a.id].count);
-}
 
 function shufflePool() {
   const ready = (r) => r.status === "ready";
@@ -407,19 +386,11 @@ function playlistsHTML() {
   if (state.searching || !(state.recipes || []).some((r) => r.status === "ready")) return "";
   const n = shufflePool().length;
   const sub = `${n} recipe${n === 1 ? "" : "s"}${state.filters.size && visibleRecipes().some((r) => r.status === "ready") ? " · filtered" : ""}`;
-  const b = bonusRecipes().length;
-  const bonusSub = b ? `${b} recipe${b === 1 ? "" : "s"} on offer` : "No offers yet";
   return `<div class="section-head"><h2>Playlists</h2></div>
   <div class="pl-row" role="list">
     <button class="pl-card" role="listitem" data-pl="shuffle" aria-label="Shuffle, ${esc(sub)}">
       <div class="art pl-art pl-shuffle">${I.shuffle}</div>
       <div class="card-title">Shuffle</div><div class="card-sub">${esc(sub)}</div></button>
-    ${b ? `<button class="pl-card" role="listitem" data-pl="bonus" aria-label="Bonus, ${esc(bonusSub)}">
-      <div class="art pl-art pl-bonus">${I.tag}</div>
-      <div class="card-title">Bonus</div><div class="card-sub">${esc(bonusSub)}</div></button>`
-    : `<div class="pl-card disabled" role="listitem" aria-disabled="true" data-pl-off="bonus">
-      <div class="art pl-art pl-bonus">${I.tag}</div>
-      <div class="card-title">Bonus</div><div class="card-sub">${esc(bonusSub)}</div></div>`}
     <div class="pl-card disabled" role="listitem" aria-disabled="true">
       <div class="art pl-art pl-soon-b"><span>${I.plus}</span></div>
       <div class="card-title">Playlist 3</div><div class="card-sub">Coming soon</div></div>
@@ -457,14 +428,6 @@ function startShuffle() {
   const pool = shufflePool().map((r) => r.id);
   if (!pool.length) { toast("Nothing to shuffle yet"); return; }
   startSession("shuffle", pool);
-}
-
-function startBonus() {
-  const list = bonusRecipes();
-  if (!list.length) { toast("No offers yet"); return; }
-  // open with a recipe that has the most discounted ingredients, the rest in random order
-  const top = list.filter((r) => state.discounts.recipes[r.id].count === state.discounts.recipes[list[0].id].count);
-  startSession("bonus", list.map((r) => r.id), top[Math.floor(Math.random() * top.length)].id);
 }
 
 const detailParts = (det) => [...det.children].filter((c) => !c.matches(".nav-bar, .nav-float")); // fixed children must not sit inside a transform
@@ -611,8 +574,6 @@ function bindLibrary() {
     $(".chips").scrollLeft = x;
   });
   $('[data-pl="shuffle"]')?.addEventListener("click", startShuffle);
-  $('[data-pl="bonus"]')?.addEventListener("click", startBonus);
-  $('[data-pl-off="bonus"]')?.addEventListener("click", () => toast("No offers yet. They show up when this week's discounts are added."));
   $$("[data-tab]").forEach((b) => b.onclick = () => { state.tab = b.dataset.tab; window.scrollTo(0, 0); renderLibrary(false); });
   $('[data-act="add"]').onclick = openAddSheet;
   $('[data-act="settings"]').onclick = openSettingsSheet;
@@ -710,14 +671,6 @@ function heroHTML(r) {
   return `<div class="hero square no-media">${genArt(r.title, true)}<div class="fade"></div></div>`;
 }
 
-// "On offer" under an ingredient: one small pill per supermarket (colour dot AND its name), with price and note.
-function dealHTML(deal) {
-  return `<span class="deal-info">${deal.offers.map((o) => {
-    const price = [o.price, o.was ? `was ${o.was}` : "", o.note].filter(Boolean).join(" · ");
-    return `<span class="deal-pill s-${o.store}" title="${esc(STORE_NAME[o.store])}: ${esc(o.item)}"><i></i>${esc(STORE_SHORT[o.store])}${price ? `<span class="deal-price"> ${esc(price)}</span>` : ""}</span>`;
-  }).join("")}</span>`;
-}
-
 function ingredientsHTML(r, factor) {
   const checked = new Set(store.get("checked." + r.id, []));
   return (r.ingredient_groups || []).map((g, gi) => `
@@ -731,10 +684,9 @@ function ingredientsHTML(r, factor) {
         if (it.unit) qty += " " + esc(unitLabel(it.unit, (it.qty_max ?? it.qty) * factor));
       }
       const orig = it.original && factor === 1 ? ` <span class="orig">${esc(it.original)}</span>` : "";
-      const deal = (r.offers || {})[key];
-      return `<li class="ing ${checked.has(key) ? "done" : ""}${deal ? " deal deal-" + deal.best : ""}" data-ing="${key}">
+      return `<li class="ing ${checked.has(key) ? "done" : ""}" data-ing="${key}">
         <span class="check">${I.check}</span>
-        <span class="txt">${qty ? `<span class="qty">${qty}</span> ` : ""}${esc(it.name)}${it.note ? `<span class="note">, ${esc(it.note)}</span>` : ""}${orig}${deal ? dealHTML(deal) : ""}</span></li>`;
+        <span class="txt">${qty ? `<span class="qty">${qty}</span> ` : ""}${esc(it.name)}${it.note ? `<span class="note">, ${esc(it.note)}</span>` : ""}${orig}</span></li>`;
     }).join("")}</ul>`).join("");
 }
 
@@ -1269,9 +1221,7 @@ async function openSettingsSheet() {
       ${select("stt_entity", "Speech-to-text", "Automatic")}
       <div class="sub-h">Shopping and notifications</div>
       ${select("todo_entity", "To-do list for shopping", "Automatic")}
-      ${select("notify_service", "Notify when a recipe is saved", "No notification")}
-      <label class="opt row"><span>Weekly supermarket offers<small>Fetched from Albert Heijn, Jumbo, Lidl and Dirk for the Bonus playlist</small></span>
-        <button class="switch" role="switch" data-opt-toggle="auto_discounts" aria-checked="${opts.auto_discounts !== false}" aria-label="Weekly supermarket offers"></button></label>` : ""}
+      ${select("notify_service", "Notify when a recipe is saved", "No notification")}` : ""}
     ${info.is_admin ? `<div class="sub-h">Instagram</div>
       <p class="hint" style="text-align:left">Instagram blocks some downloads without a login. Paste the <b>sessionid</b> cookie (or a cookies.txt export) of an Instagram account here. A second account is safest. ${info.instagram_cookies ? "<b>Cookies are set.</b>" : ""}</p>
       <textarea class="field" id="ig" rows="2" placeholder="${info.instagram_cookies ? "Paste new cookies to replace, or leave empty and save to remove" : "sessionid=…"}"></textarea>

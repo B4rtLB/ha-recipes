@@ -15,15 +15,6 @@ class FakeAI(AITaskEntity):
         if task.instructions.startswith("A recipe is already parsed"):  # JSON-LD shortcut: tags only
             data = {"tags": ["Main", "Chicken", "#Asian", "Bogus"], "description": "A tagged test dish."}
             return GenDataTaskResult(conversation_id=str(uuid.uuid4()), data=json.dumps(data))
-        if task.instructions.startswith("For each Dutch supermarket offer"):  # offer search words
-            from custom_components.recipes.offer_terms import dictionary_terms
-            items = []
-            for line in task.instructions.split("OFFERS (number | name | pack | category)\n", 1)[-1].splitlines():
-                num, _, rest = line.partition("|")
-                if num.strip().isdigit():
-                    # like the real AI: the word list's words, and [] for what is not an ingredient
-                    items.append({"i": int(num), "terms": dictionary_terms(rest.split("|")[0])[:6]})
-            return GenDataTaskResult(conversation_id=str(uuid.uuid4()), data=json.dumps({"items": items}))
         title = "Test Dish"
         m = re.search(r'"name":\s*"([^"]+)"', src) or re.search(r"RECIPE TEXT:\n(.+)", src)
         if m: title = m.group(1).strip()

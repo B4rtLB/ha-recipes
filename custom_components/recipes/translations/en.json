@@ -13,9 +13,7 @@
           "language": "Recipe language",
           "transcribe": "Transcribe video audio when the caption is short",
           "notify_service": "Notify when a recipe is ready (notify entity like notify.barts_iphone, or a notify action)",
-          "todo_entity": "Shopping list (to-do list for ingredients)",
-          "extraction_mode": "Reading mode (classic or lean)",
-          "auto_discounts": "Refresh the weekly supermarket offers automatically"
+          "todo_entity": "Shopping list (to-do list for ingredients)"
         }
       }
     }
@@ -31,9 +29,7 @@
           "language": "Recipe language",
           "transcribe": "Transcribe video audio when the caption is short",
           "notify_service": "Notify when a recipe is ready (notify entity like notify.barts_iphone, or a notify action)",
-          "todo_entity": "Shopping list (to-do list for ingredients)",
-          "extraction_mode": "Reading mode (classic or lean)",
-          "auto_discounts": "Refresh the weekly supermarket offers automatically"
+          "todo_entity": "Shopping list (to-do list for ingredients)"
         }
       }
     }
@@ -84,46 +80,6 @@
         "id": {
           "name": "ID",
           "description": "Recipe ID (optional)."
-        }
-      }
-    },
-    "set_discounts": {
-      "name": "Set discounts",
-      "description": "Replace one supermarket's discount list for a week; the other supermarkets are not touched. Items match recipe ingredients by their terms (Dutch and English keywords, all words of one term must appear in the ingredient name).",
-      "fields": {
-        "store": {
-          "name": "Supermarket",
-          "description": "ah, jumbo, lidl or dirk."
-        },
-        "valid_from": {
-          "name": "Valid from",
-          "description": "First day of the offers."
-        },
-        "valid_to": {
-          "name": "Valid to",
-          "description": "Last day of the offers."
-        },
-        "items": {
-          "name": "Items",
-          "description": "List of {name, terms, price, was, note, valid_from, valid_to}. Only name is required (terms default to the name; an item may have its own period)."
-        }
-      }
-    },
-    "refresh_discounts": {
-      "name": "Refresh discounts",
-      "description": "Fetch this week's offers from Albert Heijn, Jumbo, Lidl and Dirk (only the lists that are missing, ended or older than 5 days, unless forced). Returns a report per supermarket.",
-      "fields": {
-        "store": {
-          "name": "Supermarkets",
-          "description": "Only these (ah, jumbo, lidl, dirk). Default: all."
-        },
-        "force": {
-          "name": "Force",
-          "description": "Fetch again even when the list is still fresh."
-        },
-        "test_base": {
-          "name": "Test base URL",
-          "description": "Development only: a local URL (127.0.0.1 or localhost) with fixture pages instead of the real shops."
         }
       }
     }
