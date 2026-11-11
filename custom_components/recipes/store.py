@@ -54,13 +54,19 @@ class DiscountStore:
         self.data = await self._store.async_load() or {"updated": None, "stores": {}}
         self.data.setdefault("stores", {})
 
-    def terms_cache(self) -> dict[str, list[str]]:
-        """Search words found for products in earlier weeks (cleaned product name -> terms)."""
+    def terms_cache(self, version: int = 0) -> dict[str, list[str]]:
+        """Search words found for products in earlier weeks (cleaned product name -> terms).
+
+        Answers given for an older version of the AI instructions are dropped.
+        """
+        if self.data.get("terms_version") != version:
+            self.data["terms_cache"] = {}
+            self.data["terms_version"] = version
         return self.data.setdefault("terms_cache", {})
 
     def save_cache(self) -> None:
         """Save after the cache changed; keeps the newest 4000 names."""
-        cache = self.terms_cache()
+        cache = self.data.setdefault("terms_cache", {})
         for key in list(cache)[: max(0, len(cache) - 4000)]:
             del cache[key]
         self._store.async_delay_save(lambda: self.data, 0.5)

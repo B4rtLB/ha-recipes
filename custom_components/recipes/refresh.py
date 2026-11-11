@@ -95,7 +95,7 @@ async def _refresh(hass, data, session, stores, force, test_base) -> dict[str, A
     today = now.date().isoformat()
     kwargs = _fixture_urls(test_base) if test_base else {}
     discount_store = data.store.discounts
-    cache = discount_store.terms_cache()
+    cache = discount_store.terms_cache(offer_terms.TERMS_VERSION)
     entity = options.get(CONF_AI_TASK_ENTITY) or ai.default_ai_task_entity(hass)
     ai_call = (lambda prompt: ai.run_ai_task(hass, entity, prompt)) if entity else None
     report: dict[str, Any] = {}

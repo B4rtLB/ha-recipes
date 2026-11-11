@@ -494,7 +494,7 @@
    }
   },
   {
-   "name": "broad term matches every chicken line (documented)",
+   "name": "a broad term only matches an ingredient that is just that word",
    "input": {
     "ingredient": "chicken thighs",
     "stores": {
@@ -514,13 +514,8 @@
     }
    },
    "expected": {
-    "offers": [
-     [
-      "dirk",
-      "Kip"
-     ]
-    ],
-    "best": "dirk"
+    "offers": [],
+    "best": null
    }
   },
   {
@@ -768,6 +763,348 @@
      ]
     ],
     "best": "ah"
+   }
+  },
+  {
+   "name": "a broad term matches the plain ingredient",
+   "input": {
+    "ingredient": "chicken",
+    "stores": {
+     "dirk": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Kip",
+        "terms": [
+         "chicken"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "expected": {
+    "offers": [
+     [
+      "dirk",
+      "Kip"
+     ]
+    ],
+    "best": "dirk"
+   }
+  },
+  {
+   "name": "garlic powder is not garlic",
+   "input": {
+    "ingredient": "garlic powder",
+    "stores": {
+     "dirk": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Item",
+        "terms": [
+         "garlic"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "expected": {
+    "offers": [],
+    "best": null
+   }
+  },
+  {
+   "name": "smoked paprika is not paprika",
+   "input": {
+    "ingredient": "smoked paprika",
+    "stores": {
+     "dirk": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Item",
+        "terms": [
+         "paprika"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "expected": {
+    "offers": [],
+    "best": null
+   }
+  },
+  {
+   "name": "extra virgin olive oil is olive oil",
+   "input": {
+    "ingredient": "extra virgin olive oil",
+    "stores": {
+     "dirk": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Item",
+        "terms": [
+         "olive oil"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "expected": {
+    "offers": [
+     [
+      "dirk",
+      "Item"
+     ]
+    ],
+    "best": "dirk"
+   }
+  },
+  {
+   "name": "olive oil is not just oil",
+   "input": {
+    "ingredient": "extra virgin olive oil",
+    "stores": {
+     "dirk": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Item",
+        "terms": [
+         "oil"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "expected": {
+    "offers": [],
+    "best": null
+   }
+  },
+  {
+   "name": "salt and pepper is two ingredients",
+   "input": {
+    "ingredient": "salt and pepper",
+    "stores": {
+     "dirk": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Item",
+        "terms": [
+         "pepper"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "expected": {
+    "offers": [],
+    "best": null
+   }
+  },
+  {
+   "name": "an either-or line does not match one of them",
+   "input": {
+    "ingredient": "beef tallow or butter",
+    "stores": {
+     "dirk": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Item",
+        "terms": [
+         "butter"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "expected": {
+    "offers": [],
+    "best": null
+   }
+  },
+  {
+   "name": "sliced cucumber is cucumber",
+   "input": {
+    "ingredient": "sliced cucumber",
+    "stores": {
+     "dirk": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Item",
+        "terms": [
+         "cucumber"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "expected": {
+    "offers": [
+     [
+      "dirk",
+      "Item"
+     ]
+    ],
+    "best": "dirk"
+   }
+  },
+  {
+   "name": "preparation words are ignored",
+   "input": {
+    "ingredient": "finely chopped fresh parsley",
+    "stores": {
+     "dirk": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Item",
+        "terms": [
+         "parsley"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "expected": {
+    "offers": [
+     [
+      "dirk",
+      "Item"
+     ]
+    ],
+    "best": "dirk"
+   }
+  },
+  {
+   "name": "numbers and size words are ignored",
+   "input": {
+    "ingredient": "2 large ripe tomatoes",
+    "stores": {
+     "dirk": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Item",
+        "terms": [
+         "tomato"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "expected": {
+    "offers": [
+     [
+      "dirk",
+      "Item"
+     ]
+    ],
+    "best": "dirk"
+   }
+  },
+  {
+   "name": "chicken stock is not chicken",
+   "input": {
+    "ingredient": "chicken stock",
+    "stores": {
+     "dirk": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Item",
+        "terms": [
+         "chicken"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "expected": {
+    "offers": [],
+    "best": null
+   }
+  },
+  {
+   "name": "dried oregano is not fresh oregano",
+   "input": {
+    "ingredient": "dried oregano",
+    "stores": {
+     "dirk": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Item",
+        "terms": [
+         "oregano"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "expected": {
+    "offers": [],
+    "best": null
+   }
+  },
+  {
+   "name": "lemon juice is matched by lemon (juice is only preparation)",
+   "input": {
+    "ingredient": "lemon juice",
+    "stores": {
+     "dirk": {
+      "valid_from": "2026-11-09",
+      "valid_to": "2026-11-15",
+      "items": [
+       {
+        "name": "Item",
+        "terms": [
+         "lemon"
+        ]
+       }
+      ]
+     }
+    }
+   },
+   "expected": {
+    "offers": [
+     [
+      "dirk",
+      "Item"
+     ]
+    ],
+    "best": "dirk"
    }
   }
  ]

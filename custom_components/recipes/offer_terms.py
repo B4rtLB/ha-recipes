@@ -245,11 +245,14 @@ def dictionary_terms(name: str) -> list[str]:
 # ------------------------------------------------------------------ AI
 
 
-TERMS_PROMPT = """For each Dutch supermarket offer below, give the cooking ingredient it is as short search words in \
-Dutch and English: singular, generic, no brand, no size, specific ("chicken breast", not "chicken"). Fresh produce, \
-meat, fish, dairy, eggs, bread and pantry items always get terms. Only give an EMPTY list for products nobody \
-cooks with: snacks, chips, sweets, cakes, drinks, coffee, ready meals, meal kits, household, cosmetics, pet food. \
-At most 6 terms.
+TERMS_VERSION = 2  # bump when TERMS_PROMPT changes: cached answers are then asked again
+
+TERMS_PROMPT = """For each Dutch supermarket offer below, give the plain cooking ingredient it is as short search \
+words in Dutch and English: singular, generic, no brand, no size, specific ("chicken breast", not "chicken"). \
+Fresh produce, meat, fish, dairy, eggs, bread and pantry items always get terms. Give an EMPTY list for \
+everything that is not one plain ingredient: snacks, sweets, cakes, drinks, coffee, ready meals, meal kits, \
+vegetable kits, salads, soups, pickles, spreads, flavoured or mixed products (flavoured yoghurt, "tomato pulp with \
+garlic", "chicken curry kit"), household, cosmetics, pet food. At most 6 terms.
 JSON only, for example: {{"items": [{{"i": 0, "terms": ["kipfilet", "chicken breast"]}}, {{"i": 1, "terms": []}}]}}
 
 OFFERS (number | name | pack | category)

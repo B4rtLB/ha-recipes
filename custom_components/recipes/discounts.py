@@ -10,9 +10,10 @@ An item may also carry its own "valid_from" / "valid_to" (default: the list's pe
 Recipes are written in English while the supermarkets are Dutch, so matching is
 done on ``terms``: normalised keywords in Dutch AND English that whoever feeds the
 data supplies. An ingredient matches an item when ALL tokens of ONE of its terms
-appear as whole words in the ingredient name. Terms must therefore be specific:
-"chicken breast" matches "boneless chicken breast, diced", but the term "chicken"
-alone would match every chicken ingredient.
+appear as whole words in the ingredient name and the ingredient has no other meaningful
+word (preparation words like "sliced" or "boneless" are ignored, see IGNORABLE). So
+"chicken breast" matches "boneless chicken breast, diced", but "chicken" matches only an
+ingredient called just "chicken", and "garlic" does not match "garlic powder".
 """
 
 from __future__ import annotations
@@ -45,13 +46,48 @@ def tokens(text: str) -> list[str]:
     return [_strip_plural(_strip_plural(w)) for w in _TOKEN_RE.split(text) if w]
 
 
+# Words in an ingredient name that do not make it a different ingredient: preparation, size, freshness.
+# "sliced cucumber" is cucumber, "garlic powder" and "smoked paprika" are not garlic or paprika.
+IGNORABLE = frozenset(
+    tokens(
+        "fresh freshly ripe large big medium small baby young whole raw organic free-range freerange boneless "
+        "skinless skin-on bone-in sliced slice chopped diced minced grated shredded crushed peeled roasted "
+        "toasted trimmed halved quartered cubed finely roughly thinly thickly coarsely optional extra virgin "
+        "good-quality quality plain clove cloves juice zest wedge wedges piece pieces bunch handful sprig "
+        "leaf leaves of or and the a an to for taste serving garnish cut into"
+    )
+)
+
+
+# -ed words that change the product ("smoked paprika", "dried oregano"), everything else ending in
+# -ed or -ly is treated as preparation ("softened", "finely").
+MEANINGFUL_ED = frozenset(
+    tokens("smoked dried cured salted unsalted sweetened unsweetened powdered pickled fermented condensed evaporated "
+           "canned jarred bottled frozen blanched sundried sun-dried")
+)
+
+
+def _ignorable(word: str) -> bool:
+    return (
+        word in IGNORABLE
+        or word.isdigit()
+        or (len(word) >= 5 and word.endswith(("ed", "ly")) and word not in MEANINGFUL_ED)
+    )
+
+
 def term_matches(ingredient: str, term: str) -> bool:
-    """All tokens of the term occur as whole words in the ingredient."""
+    """All words of the term are in the ingredient and nothing else meaningful is.
+
+    "chicken breast" matches "boneless chicken breast, diced" (boneless and diced are only
+    preparation), but "garlic" does not match "garlic powder" and "oil" does not match "olive oil".
+    """
     want = tokens(term)
     if not want:
         return False
-    have = set(tokens(ingredient))
-    return all(t in have for t in want)
+    have = tokens(ingredient)
+    if not all(t in have for t in want):
+        return False
+    return all(t in want or _ignorable(t) for t in have)
 
 
 def item_matches(ingredient: str, item: dict[str, Any]) -> bool:
