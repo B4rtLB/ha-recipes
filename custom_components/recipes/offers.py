@@ -61,7 +61,7 @@ NON_FOOD_WORDS = (
     "drogisterij", "gezondheid", "verzorging", "huishoud", "baby", "dier", "non-food", "nonfood", "kleding",
     "speelgoed", "tuin", "bloemen", "planten", "bier", "wijn", "frisdrank", "sappen", "sterke drank", "alcohol",
     "snoep", "koek", "chips", "koffie", "thee", "kantoor", "elektronica", "slapen", "personal", "household",
-    "cosmetic",
+    "cosmetic", "borrel", "maaltijden", "salades", "chocolade", "ontbijtgranen", "baby", "gebak", "brood en",
 )
 
 
@@ -109,15 +109,18 @@ def _offer(name: Any, *, pack=None, price=None, was=None, note=None, valid_from=
     }
 
 
+MAX_DAYS = 21  # longer than three weeks is a seasonal or permanent promotion, not this week's offer
+
+
 def finish(offers: list[dict[str, Any]], today: str) -> list[dict[str, Any]]:
-    """Fill in missing dates, drop what has already ended and exact duplicates."""
+    """Fill in missing dates, drop what has ended, runs longer than MAX_DAYS, and exact duplicates."""
     out, seen = [], set()
     for offer in offers:
         if not offer:
             continue
         start = offer.get("valid_from") or today
         end = offer.get("valid_to") or (date.fromisoformat(start) + timedelta(days=6)).isoformat()
-        if end < today or end < start:
+        if end < today or end < start or (date.fromisoformat(end) - date.fromisoformat(start)).days > MAX_DAYS:
             continue
         key = (offer["name"].lower(), offer.get("pack"), start, end)
         if key in seen:

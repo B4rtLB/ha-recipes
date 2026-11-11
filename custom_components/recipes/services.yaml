@@ -23,6 +23,13 @@ status:
       required: false
       selector:
         text:
+    only:
+      required: false
+      description: With id and "offers": only the title and the ingredient lines that are on offer.
+      selector:
+        select:
+          options:
+            - offers
 delete:
   fields:
     id:

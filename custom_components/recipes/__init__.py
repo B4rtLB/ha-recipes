@@ -76,11 +76,22 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         if data is None:
             raise vol.Invalid("Recipes is not set up")
         recipes = sorted(data.store.recipes.values(), key=lambda r: r.get("created") or "", reverse=True)
+        today = datetime.now(ZoneInfo("Europe/Amsterdam")).date().isoformat()
+        active = discounts.active_stores(data.store.discounts.data, today)
         if call.data.get("id"):
             r = data.store.recipes.get(call.data["id"])
             if r is None:
                 raise vol.Invalid("Unknown recipe")
+            lines = discounts.match_recipe(r, active)
+            names = {f"{gi}.{ii}": i.get("name") for gi, g in enumerate(r.get("ingredient_groups") or []) for ii, i in enumerate(g.get("items") or [])}
+            offers = [
+                {"ingredient": names.get(key), "best": line["best"], "offers": [[o["store"], o["item"], o.get("price")] for o in line["offers"]]}
+                for key, line in lines.items()
+            ]
+            if call.data.get("only") == "offers":
+                return {"id": r["id"], "title": r.get("title"), "ingredients": len(names), "offers": offers}
             return {
+                "offers": offers,
                 "id": r["id"],
                 "title": r.get("title"),
                 "status": r.get("status"),
@@ -93,8 +104,6 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
                 "created": r.get("created"),
                 "updated": r.get("updated"),
             }
-        today = datetime.now(ZoneInfo("Europe/Amsterdam")).date().isoformat()
-        active = discounts.active_stores(data.store.discounts.data, today)
         on_offer = discounts.match_all(recipes, active)
         return {
             "webhook_path": f"/api/webhook/{data.entry.data[CONF_WEBHOOK_ID]}",
@@ -199,6 +208,7 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
         schema=vol.Schema({
             vol.Optional("limit", default=20): vol.All(int, vol.Range(min=1, max=500)),
             vol.Optional("id"): cv.string,
+            vol.Optional("only"): vol.In(["offers"]),
         }),
         supports_response=SupportsResponse.ONLY,
     )

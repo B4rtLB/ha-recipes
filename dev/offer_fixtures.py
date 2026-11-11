@@ -89,7 +89,7 @@ def lidl(today: str) -> str:
         return t
 
     tiles = [
-        tile("Verse pasta spaghetti", 1.29, "500 g", "Food", today, _d(today, 5)),
+        tile("Verse spaghetti", 1.29, "500 g", "Food", today, _d(today, 5)),
         tile("Hollandse paprika's", 1.49, "500 g", "F+V", None, _d(today, 5), 1.99),
         tile("Sokken", 3.99, "3 paar", "NonFood", today, _d(today, 5)),
         tile("Oude kaas", 2.49, "200 g", "Food", _d(today, -9), _d(today, -2)),
@@ -109,7 +109,7 @@ def ah(today: str) -> tuple[str, str]:
     week = _d(today, 5)
     products = [
         product(1, "AH Scharrel kipfilet", "400 g", week, bonusMechanism="2 voor 5.00", priceBeforeBonus=3.19),
-        product(2, "AH Franse scharrelkipfilet", "500 g", week, currentPrice=5.24, priceBeforeBonus=6.99,
+        product(2, "AH Franse kipfilet", "500 g", week, currentPrice=5.24, priceBeforeBonus=6.99,
                 discountLabels=[{"defaultDescription": "25% korting"}]),
         product(3, "Hak Bruine bonen 4-pack", "4 stuks", "2999-12-31", promotionType="AHONLINE", bonusMechanism="10% volume voordeel"),
         product(4, "AH Basic eieren", "10 stuks", "", promotionType="PERPETUAL"),

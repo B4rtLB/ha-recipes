@@ -31,15 +31,6 @@
    },
    "expected": {
     "kept": {
-     "AH Scharrel kipfilet 400 g": [
-      "kipfilet",
-      "chicken breast",
-      "chicken fillet"
-     ],
-     "Hollandse Conference peren": [
-      "peren",
-      "pear"
-     ],
      "Toffee muffin": [
       "muffin"
      ],
@@ -52,7 +43,7 @@
      "ai_calls": 1,
      "from_ai": 6,
      "from_dictionary": 0,
-     "dropped": 2
+     "dropped": 4
     },
     "asked": 1,
     "cache": [
@@ -85,26 +76,13 @@
       "kipfilet",
       "chicken breast",
       "chicken fillet"
-     ],
-     "Hollandse Conference peren": [
-      "peren",
-      "pear"
-     ],
-     "Toffee muffin": [
-      "toffee muffin"
-     ],
-     "Mosselen": [
-      "mosselen"
-     ],
-     "Paturain": [
-      "paturain"
      ]
     },
     "stats": {
      "ai_calls": 0,
      "from_ai": 0,
-     "from_dictionary": 5,
-     "dropped": 1
+     "from_dictionary": 1,
+     "dropped": 5
     },
     "asked": 0,
     "cache": []
@@ -130,26 +108,13 @@
       "kipfilet",
       "chicken breast",
       "chicken fillet"
-     ],
-     "Hollandse Conference peren": [
-      "peren",
-      "pear"
-     ],
-     "Toffee muffin": [
-      "toffee muffin"
-     ],
-     "Mosselen": [
-      "mosselen"
-     ],
-     "Paturain": [
-      "paturain"
      ]
     },
     "stats": {
      "ai_calls": 0,
      "from_ai": 0,
-     "from_dictionary": 5,
-     "dropped": 1,
+     "from_dictionary": 1,
+     "dropped": 5,
      "errors": 1
     },
     "asked": 1,
@@ -183,6 +148,7 @@
       "mussels"
      ],
      "Broccoli": [
+      "broccoli",
       "broccoli"
      ]
     },

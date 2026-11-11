@@ -72,7 +72,7 @@ DICTIONARY: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
     (("tomaten", "tomaat", "trostomaten", "cherrytomaten", "snoeptomaten"), ("tomato", "tomatoes")),
     (("uien", "ui", "rode uien", "sjalotten", "lente-ui", "bosui"), ("onion", "shallot", "spring onion")),
     (("knoflook",), ("garlic",)),
-    (("paprika", "paprika's"), ("bell pepper", "pepper")),
+    (("paprika", "paprika's", "puntpaprika", "puntpaprika's"), ("bell pepper",)),
     (("wortelen", "wortel", "winterpeen", "peen"), ("carrot", "carrots")),
     (("broccoli",), ("broccoli",)),
     (("bloemkool",), ("cauliflower",)),
@@ -176,6 +176,7 @@ def cleaned(name: str, pack: str | None = None) -> str:
     return re.sub(r"\s+", " ", text).strip(" -,.")
 
 
+# (the word list is for the fallback when no AI answered: plain products only, whole words)
 # every Dutch word with its English terms, longest word first: "currypasta" is a curry paste and
 # then no longer also "pasta", "zoete aardappel" is not also a potato
 _KEYS = tuple(
@@ -191,13 +192,29 @@ READY_MADE = re.compile(
 )
 
 
+# Words that describe a plain product without making it something else ("verse gerookte zalm").
+MODIFIERS = frozenset((
+    "verse vers los hollandse hollands franse spaanse griekse italiaanse biologisch biologische bio rode rood witte "
+    "wit groene groen gele geel zwarte zwart gerookte gerookt gedroogde gedroogd kleinverpakking grote groot kleine "
+    "klein extra vol volle halfvolle magere jonge jong oude oud belegen naturel scharrel vrije uitloop gesneden "
+    "gehakte fijn grof ongezouten gezouten zoete zoet pittige mild milde nieuwe oogst stuks stuk pers per kilo bos "
+    "bosje tros trosjes mix mixed noten"
+).split())
+
+
 def dictionary_terms(name: str) -> list[str]:
-    """Dutch and English terms from the built-in word list for a product name; [] if nothing matches."""
+    """Dutch and English terms from the built-in word list for a plain product name.
+
+    [] for composite products: "AH Verse soep tomaat" or "Gehakt met ui" contain ingredient words
+    but are not that ingredient, so exactly one food of the list may match and every other word must be
+    a plain modifier. Deliberately strict: this is only the fallback when the AI is not available.
+    """
     text = cleaned(name)
     if READY_MADE.search(text):
         return []
     words = _WORD.findall(text)
     used: set[int] = set()  # a word of the product explains one entry only
+    matched: set[int] = set()  # entries of the word list that matched
     out: list[str] = []
     for key, english in _KEYS:
         if " " in key:
@@ -210,14 +227,18 @@ def dictionary_terms(name: str) -> list[str]:
         else:
             hit = [
                 i for i, w in enumerate(words)
-                if i not in used and (w == key or (len(key) >= 4 and w.endswith(key)))
+                if i not in used and w == key
             ]
             if not hit:
                 continue
         used.update(hit)
+        matched.add(id(english))
         for term in (key, *english):
             if term not in out:
                 out.append(term)
+    unexplained = sum(1 for i, w in enumerate(words) if i not in used and w not in MODIFIERS and len(w) > 2)
+    if unexplained or len(matched) > 1:
+        return []  # another word or a second food is in there ("gehakt met ui"): a composite, not the plain ingredient
     return out
 
 
@@ -300,18 +321,14 @@ async def add_terms(
     kept = []
     for offer in offers:
         key = keys[id(offer)]
+        known = cache.get(key)
         if READY_MADE.search(key):
             terms: list[str] = []  # whatever the AI said, a ready-made food is not the ingredient in it
-        else:
-            known = cache.get(key)
-            words = dictionary_terms(offer["name"])
-            if known is None:  # the AI did not answer for this one: word list, else the Dutch name itself
-                terms = words or ([key] if re.search(r"[a-z]{3}", key) else [])
-                stats["from_dictionary"] += bool(terms)
-            else:
-                # the AI's words plus the word list's: more recall, both are specific. The word list also
-                # rescues what the AI left empty: its words are real ingredients, the AI can be too strict.
-                terms = list(dict.fromkeys([*known, *words]))[:8]
+        elif known is not None:
+            terms = known  # the AI decided, including "not an ingredient" ([])
+        else:  # the AI did not answer for this one: only a plain product from the word list
+            terms = dictionary_terms(offer["name"])
+            stats["from_dictionary"] += bool(terms)
         if terms:
             offer["terms"] = terms
             kept.append(offer)

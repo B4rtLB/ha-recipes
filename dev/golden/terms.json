@@ -20,7 +20,13 @@
      "Kippendijfilet",
      "AH Ovenschotel scharrel kipfilet Koreaans",
      "Alle Jumbo gekoelde maaltijdpakketten",
-     "AH Gegrilde halve kip sweet chili"
+     "AH Gegrilde halve kip sweet chili",
+     "AH Gehakt met ui",
+     "AH Pasta geraspte kaas",
+     "AH Bloemkoolrijst kleinverpakking",
+     "Zoete puntpaprika's",
+     "Hollandse winterpeen",
+     "AH Verse soep tomaat"
     ]
    },
    "expected": {
@@ -33,15 +39,8 @@
      "eieren",
      "egg"
     ],
-    "Hellmann's of Calvé mayonaise": [
-     "mayonaise",
-     "mayonnaise"
-    ],
-    "Alle Jumbo wokgroenten zak à 400 gram of Jumbo's woksauzen": [
-     "wokgroenten",
-     "stir fry vegetables",
-     "mixed vegetables"
-    ],
+    "Hellmann's of Calvé mayonaise": [],
+    "Alle Jumbo wokgroenten zak à 400 gram of Jumbo's woksauzen": [],
     "AH Rundergehakt": [
      "rundergehakt",
      "ground beef",
@@ -64,10 +63,7 @@
      "zoete aardappelen",
      "sweet potato"
     ],
-    "Verse pasta spaghetti": [
-     "spaghetti",
-     "pasta"
-    ],
+    "Verse pasta spaghetti": [],
     "Beemster": [],
     "Kippendijfilet": [
      "kippendijfilet",
@@ -75,7 +71,20 @@
     ],
     "AH Ovenschotel scharrel kipfilet Koreaans": [],
     "Alle Jumbo gekoelde maaltijdpakketten": [],
-    "AH Gegrilde halve kip sweet chili": []
+    "AH Gegrilde halve kip sweet chili": [],
+    "AH Gehakt met ui": [],
+    "AH Pasta geraspte kaas": [],
+    "AH Bloemkoolrijst kleinverpakking": [],
+    "Zoete puntpaprika's": [
+     "puntpaprika's",
+     "bell pepper"
+    ],
+    "Hollandse winterpeen": [
+     "winterpeen",
+     "carrot",
+     "carrots"
+    ],
+    "AH Verse soep tomaat": []
    }
   },
   {
