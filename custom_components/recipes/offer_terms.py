@@ -243,6 +243,27 @@ def dictionary_terms(name: str) -> list[str]:
     return out
 
 
+def food_count(key: str) -> int:
+    """How many different foods of the word list a product name holds ("Heks'nkaas tomaat basilicum": 2).
+
+    Compound words count by their ending or start ("heks'nkaas" holds "kaas"); a word explains one food
+    only, longest word first, so "kipfilet" is one food and not also "kip".
+    """
+    words = [w for w in _WORD.findall(key) if w not in ("passata", "pelati", "polpa", "gepelde", "gezeefde")]
+    used: set[int] = set()
+    count = 0
+    for word_key, _ in _KEYS:
+        parts = word_key.split()
+        if len(parts) > 1 or len(word_key) < 4:
+            continue
+        for i, w in enumerate(words):
+            if i not in used and (w == word_key or w.endswith(word_key) or w.startswith(word_key)):
+                used.add(i)
+                count += 1
+                break
+    return count
+
+
 # ------------------------------------------------------------------ AI
 
 
@@ -353,7 +374,8 @@ async def add_terms(
         if READY_MADE.search(key):
             terms: list[str] = []  # whatever the AI said, a ready-made food is not the ingredient in it
         elif known is not None:
-            terms = grounded(known, key)  # the AI decided, including "not an ingredient" ([])
+            # the AI decided, including "not an ingredient" ([]); but its answer must fit the name
+            terms = [] if food_count(key) > 1 else grounded(known, key)
         else:  # the AI did not answer for this one: only a plain product from the word list
             terms = dictionary_terms(offer["name"])
             stats["from_dictionary"] += bool(terms)

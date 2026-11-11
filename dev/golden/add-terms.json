@@ -178,7 +178,8 @@
      "Mutti Pomodori pelati",
      "AH Spekreepjes",
      "Speculaaskruiden",
-     "Vrije uitloopeieren"
+     "Vrije uitloopeieren",
+     "Heks'nkaas Tomaat basilicum"
     ],
     "ai": {
      "Chocomel 0% suiker toegevoegd 6-pack": [
@@ -220,6 +221,10 @@
      "Vrije uitloopeieren": [
       "eieren",
       "eggs"
+     ],
+     "Heks'nkaas Tomaat basilicum": [
+      "tomaat",
+      "tomatoes"
      ]
     }
    },
@@ -252,14 +257,15 @@
     },
     "stats": {
      "ai_calls": 1,
-     "from_ai": 10,
+     "from_ai": 11,
      "from_dictionary": 0,
-     "dropped": 4
+     "dropped": 5
     },
     "asked": 1,
     "cache": [
      "chocomel % suiker toegevoegd -pack",
      "ehrmann grand dessert chocolade",
+     "heks'nkaas tomaat basilicum",
      "hipro protein drink bosbes",
      "hollandse conference peren",
      "lurpak roomboter smeerbaar",
