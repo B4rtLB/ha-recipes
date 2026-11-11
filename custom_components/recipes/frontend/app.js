@@ -386,11 +386,14 @@ async function loadDiscounts() {
   try { state.discounts = await api("/discounts"); } catch { state.discounts = state.discounts || null; }
 }
 
-// Recipes (ready) that have at least one ingredient on offer, most offers first.
+// Recipes (ready) with at least BONUS_MIN ingredient lines on offer, most offers first. Four shops
+// have hundreds of offers a week, so nearly every recipe has one or two lines on offer; the Bonus
+// playlist is for the ones where a real part of the shopping is cheaper.
+const BONUS_MIN = 4;
 function bonusRecipes() {
   const d = state.discounts;
   if (!d || !Object.keys(d.stores || {}).length) return [];
-  return (state.recipes || []).filter((r) => r.status === "ready" && d.recipes?.[r.id])
+  return (state.recipes || []).filter((r) => r.status === "ready" && (d.recipes?.[r.id]?.count || 0) >= BONUS_MIN)
     .sort((a, b) => d.recipes[b.id].count - d.recipes[a.id].count);
 }
 

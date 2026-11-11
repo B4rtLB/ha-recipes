@@ -252,7 +252,8 @@ const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails.p
       body: JSON.stringify({ valid_from: day(-1), valid_to: day(6), items }) });
     return r.status;
   }, [store, items]);
-  ok(await feed('ah', [{ name: 'Kippendij', terms: ['kippendij', 'chicken thigh'], price: '€5.49', was: '€6.99', note: 'invented offer' }]) === 200, 'discounts fed (ah)');
+  ok(await feed('ah', [{ name: 'Kippendij', terms: ['kippendij', 'chicken thigh'], price: '€5.49', was: '€6.99', note: 'invented offer' },
+    { name: 'Knoflook', terms: ['garlic'], price: '€0.99' }, { name: 'Chilivlokken', terms: ['chili flakes'] }, { name: 'Kokosmelk', terms: ['coconut milk'], price: '€1.19' }]) === 200, 'discounts fed (ah)');
   ok(await feed('jumbo', [{ name: 'Chicken thigh fillet', terms: ['chicken thigh'], price: '€4.89' }]) === 200, 'discounts fed (jumbo)');
   ok(await feed('lidl', [{ name: 'Kippendij', terms: ['chicken thigh'], price: '€5.99' }]) === 200, 'discounts fed (lidl)');
   ok(await feed('dirk', [{ name: 'Kippendij', terms: ['chicken thigh'], price: '€6.19' }]) === 200, 'discounts fed (dirk)');
@@ -261,7 +262,7 @@ const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails.p
   const onOffer = await page.evaluate(async () => {
     const t = JSON.parse(localStorage.getItem('recipes.auth')).access;
     const d = await (await fetch('/api/recipes/discounts', { headers: { Authorization: 'Bearer ' + t } })).json();
-    return Object.keys(d.recipes).length;
+    return Object.values(d.recipes).filter((x) => x.count >= 4).length; // the app's Bonus bar
   });
   const bsub = await page.$eval('[data-pl="bonus"] .card-sub', (e) => e.textContent);
   ok(onOffer > 0 && bsub === `${onOffer} recipe${onOffer === 1 ? '' : 's'} on offer`, `Bonus card count: ${bsub}`);
