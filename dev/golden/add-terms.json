@@ -164,6 +164,112 @@
      "mosselen"
     ]
    }
+  },
+  {
+   "name": "AI answers that do not fit the product are rejected",
+   "input": {
+    "offers": [
+     "Chocomel 0% suiker toegevoegd 6-pack",
+     "Ehrmann Grand dessert chocolade",
+     "HiPRO Protein drink bosbes",
+     "AH Roomboter speculaasmolens",
+     "Lurpak roomboter of smeerbaar",
+     "Hollandse Conference peren",
+     "Mutti Pomodori pelati",
+     "AH Spekreepjes",
+     "Speculaaskruiden",
+     "Vrije uitloopeieren"
+    ],
+    "ai": {
+     "Chocomel 0% suiker toegevoegd 6-pack": [
+      "melk",
+      "milk"
+     ],
+     "Ehrmann Grand dessert chocolade": [
+      "yoghurt",
+      "yogurt"
+     ],
+     "HiPRO Protein drink bosbes": [
+      "ei",
+      "egg"
+     ],
+     "AH Roomboter speculaasmolens": [
+      "roomboter",
+      "butter"
+     ],
+     "Lurpak roomboter of smeerbaar": [
+      "roomboter",
+      "butter"
+     ],
+     "Hollandse Conference peren": [
+      "peren",
+      "pears"
+     ],
+     "Mutti Pomodori pelati": [
+      "tomaten",
+      "tomatoes"
+     ],
+     "AH Spekreepjes": [
+      "spekreepjes",
+      "bacon"
+     ],
+     "Speculaaskruiden": [
+      "speculaaskruiden",
+      "speculoos spice"
+     ],
+     "Vrije uitloopeieren": [
+      "eieren",
+      "eggs"
+     ]
+    }
+   },
+   "expected": {
+    "kept": {
+     "Lurpak roomboter of smeerbaar": [
+      "roomboter",
+      "butter"
+     ],
+     "Hollandse Conference peren": [
+      "peren",
+      "pears"
+     ],
+     "Mutti Pomodori pelati": [
+      "tomaten",
+      "tomatoes"
+     ],
+     "AH Spekreepjes": [
+      "spekreepjes",
+      "bacon"
+     ],
+     "Speculaaskruiden": [
+      "speculaaskruiden",
+      "speculoos spice"
+     ],
+     "Vrije uitloopeieren": [
+      "eieren",
+      "eggs"
+     ]
+    },
+    "stats": {
+     "ai_calls": 1,
+     "from_ai": 10,
+     "from_dictionary": 0,
+     "dropped": 4
+    },
+    "asked": 1,
+    "cache": [
+     "chocomel % suiker toegevoegd -pack",
+     "ehrmann grand dessert chocolade",
+     "hipro protein drink bosbes",
+     "hollandse conference peren",
+     "lurpak roomboter smeerbaar",
+     "mutti pomodori pelati",
+     "roomboter speculaasmolens",
+     "speculaaskruiden",
+     "spekreepjes",
+     "vrije uitloopeieren"
+    ]
+   }
   }
  ]
 }

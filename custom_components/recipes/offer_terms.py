@@ -187,7 +187,8 @@ _KEYS = tuple(
 # Ready-made foods contain ingredient words ("ovenschotel kipfilet") but are not that ingredient.
 READY_MADE = re.compile(
     r"ovenschotel|maaltijd|stamppot|pizza|burger|nugget|kebab|schnitzel|sandwich|taart|koek|vlaai|chips|snack|"
-    r"pudding|gebak|cordon bleu|loempia|bapao|salade|wrap met|pastei|gegrilde|gebraden|gekruide",
+    r"pudding|gebak|cordon bleu|loempia|bapao|salade|wrap met|pastei|gegrilde|gebraden|gekruide|"
+    r"dessert|drink|shake|smoothie|speculaas(?!kruid)|mousse|chocomel|protein|proteïne|\breep\b|snoep",
     re.IGNORECASE,
 )
 
@@ -245,10 +246,11 @@ def dictionary_terms(name: str) -> list[str]:
 # ------------------------------------------------------------------ AI
 
 
-TERMS_VERSION = 2  # bump when TERMS_PROMPT changes: cached answers are then asked again
+TERMS_VERSION = 3  # bump when TERMS_PROMPT changes: cached answers are then asked again
 
 TERMS_PROMPT = """For each Dutch supermarket offer below, give the plain cooking ingredient it is as short search \
-words in Dutch and English: singular, generic, no brand, no size, specific ("chicken breast", not "chicken"). \
+words in Dutch and English: singular, generic, no brand, no size, specific ("chicken breast", not "chicken"). The Dutch term must be a word \
+from the product name itself, as written there. \
 Fresh produce, meat, fish, dairy, eggs, bread and pantry items always get terms. Give an EMPTY list for \
 everything that is not one plain ingredient: snacks, sweets, cakes, drinks, coffee, ready meals, meal kits, \
 vegetable kits, salads, soups, pickles, spreads, flavoured or mixed products (flavoured yoghurt, "tomato pulp with \
@@ -282,6 +284,29 @@ def parse_terms_reply(text: str, size: int) -> dict[int, list[str]]:
         if isinstance(terms, list):
             out[entry["i"]] = [str(t).strip().lower() for t in terms if str(t).strip()][:6]
     return out
+
+
+_ALIASES = {"pomodori": "tomaat", "pelati": "tomaat", "passata": "tomaat", "peperoni": "paprika"}
+
+
+def grounded(terms: list[str], key: str) -> list[str]:
+    """The terms, or [] when none of them appears in the product name.
+
+    The AI sometimes decides from the brand or context: "Chocomel" is not milk, "Ehrmann dessert
+    chocolade" is not yogurt. A real ingredient product names its ingredient ("roomboter" for butter,
+    "peren" for pears), so at least one term must share its first four letters with a word of the name.
+    """
+    words = [_ALIASES.get(w, w) for w in _WORD.findall(key)]
+    for term in terms:
+        for part in term.split():
+            if len(part) < 3:
+                continue
+            for word in words:
+                if part == word or (len(part) >= 4 and (part in word or word in part and len(word) >= 4)):
+                    return terms
+                if len(part) >= 5 and len(word) >= 5 and part[:4] == word[:4]:
+                    return terms
+    return []
 
 
 AiCall = Callable[[str], Awaitable[str]]
@@ -328,7 +353,7 @@ async def add_terms(
         if READY_MADE.search(key):
             terms: list[str] = []  # whatever the AI said, a ready-made food is not the ingredient in it
         elif known is not None:
-            terms = known  # the AI decided, including "not an ingredient" ([])
+            terms = grounded(known, key)  # the AI decided, including "not an ingredient" ([])
         else:  # the AI did not answer for this one: only a plain product from the word list
             terms = dictionary_terms(offer["name"])
             stats["from_dictionary"] += bool(terms)
