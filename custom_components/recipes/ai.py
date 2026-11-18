@@ -327,6 +327,7 @@ _PROTEIN_WORDS = {
     "Seafood": r"shrimps?|prawns?|mussels?|squid|crab|lobster|scallops?|clams?|garnalen|mosselen",
 }
 _PROTEIN_RE = {tag: re.compile(rf"\b(?:{words})\b", re.IGNORECASE) for tag, words in _PROTEIN_WORDS.items()}
+_VEGAN = re.compile(r"\b(?:vegan|plant[- ]based|meat[- ]?free|meatless)\b", re.IGNORECASE)
 _NOT_THE_PROTEIN = re.compile(r"stock|broth|bouillon|sauce|saus|seasoning|flavou?r", re.IGNORECASE)
 
 
@@ -389,8 +390,13 @@ def normalize(data: dict[str, Any]) -> dict[str, Any]:
         if tag in allowed and tag not in tags:
             tags.append(tag)
 
-    if not any(tag in TAG_GROUPS["Protein"] for tag in tags):
-        names = [item["name"] for group in groups for item in group["items"]]
+    names = [item["name"] for group in groups for item in group["items"]]
+    if _VEGAN.search(f"{data.get('title') or ''} {data.get('description') or ''}"):
+        # "vegan chicken" is not chicken: the meat and fish tags are wrong whatever the model said
+        tags = [t for t in tags if t not in TAG_GROUPS["Protein"] or t == "Vegetarian"]
+        if "Vegetarian" not in tags:
+            tags.append("Vegetarian")
+    elif not any(tag in TAG_GROUPS["Protein"] for tag in tags):
         if protein := guess_protein(str(data.get("title") or ""), names):
             order = [t for values in TAG_GROUPS.values() for t in values]
             tags = sorted([*tags, protein], key=order.index)
