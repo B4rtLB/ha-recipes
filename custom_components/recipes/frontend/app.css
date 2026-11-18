@@ -582,3 +582,25 @@ select.field {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* rating: five stars under the title */
+.rating { display: flex; gap: 2px; margin-top: 10px; }
+.star { background: none; border: 0; padding: 4px; color: var(--label-3); line-height: 0; cursor: pointer; }
+.star svg { width: 26px; height: 26px; display: block; }
+.star.on { color: var(--accent); }
+
+/* your photos: a sliding row, one photo per screen width */
+.photos .chip { display: inline-flex; align-items: center; gap: 6px; }
+.photos .chip svg { width: 16px; height: 16px; }
+.slides { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 10px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.slides::-webkit-scrollbar { display: none; }
+.slide { position: relative; flex: 0 0 100%; scroll-snap-align: center; aspect-ratio: 4 / 3; border-radius: 18px; overflow: hidden; background: var(--bg-elev); }
+.slide img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.slide .icon-btn { position: absolute; top: 10px; right: 10px; width: 34px; height: 34px; }
+.slide .icon-btn svg { width: 16px; height: 16px; }
+.dots { display: flex; justify-content: center; gap: 6px; margin-top: 10px; }
+.dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--label-3); }
+.dots i.on { background: var(--label); }
+.photo-empty { color: var(--label-2); font-size: 14px; }
+.hero-add { position: absolute; left: 50%; bottom: 28px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 6px; z-index: 2; }
+.hero-add svg { width: 16px; height: 16px; }

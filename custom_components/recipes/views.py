@@ -7,6 +7,7 @@ from http import HTTPStatus
 import logging
 from pathlib import Path
 import re
+import uuid
 from typing import TYPE_CHECKING, Any
 
 from aiohttp import web
@@ -37,6 +38,7 @@ from .const import (
     URL_APP,
     VERSION,
 )
+from . import video
 from .pipeline import new_recipe_from_payload, save_upload
 
 if TYPE_CHECKING:
@@ -45,12 +47,13 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 
 FRONTEND = Path(__file__).parent / "frontend"
-MEDIA_NAMES = re.compile(r"^(video\.mp4|poster\.jpg|image\.jpg|upload\.(jpg|jpeg|png|heic|webp|pdf))$")
+MEDIA_NAMES = re.compile(r"^(video\.mp4|poster\.jpg|image\.jpg|photo-[0-9a-f]{8}\.jpg|upload\.(jpg|jpeg|png|heic|webp|pdf))$")
+PHOTO_NAME = re.compile(r"^photo-[0-9a-f]{8}\.jpg$")
 MAX_UPLOAD = 40 * 1024 * 1024
 
 SUMMARY_KEYS = (
     "id", "title", "status", "progress", "error", "created", "updated", "total_min",
-    "prep_min", "cook_min", "tags", "favorite", "servings",
+    "prep_min", "cook_min", "tags", "favorite", "servings", "rating",
 )
 
 
@@ -84,6 +87,8 @@ def serialize(hass: HomeAssistant, recipe: dict[str, Any], *, full: bool) -> dic
     if full:
         out["poster_url"] = _media_url(hass, rid, media.get("poster") or media.get("image"))
         out["video_url"] = _media_url(hass, rid, media.get("video"))
+        out["photos"] = [{"name": n, "url": _media_url(hass, rid, n)} for n in media.get("photos") or []]
+        out["image_is_photo"] = bool(PHOTO_NAME.match(media.get("image") or ""))
     return out
 
 
@@ -277,8 +282,12 @@ class RecipeView(HomeAssistantView):
         if recipe_id not in store.recipes:
             return self.json_message("Not found", HTTPStatus.NOT_FOUND)
         body = await request.json()
-        allowed = {"favorite", "title", "my_notes", "tags", "servings", "last_cooked"}
+        allowed = {"favorite", "title", "my_notes", "tags", "servings", "last_cooked", "rating"}
         changes = {k: v for k, v in body.items() if k in allowed}
+        if "rating" in changes:
+            rating = changes["rating"]
+            if rating is not None and not (isinstance(rating, int) and not isinstance(rating, bool) and 1 <= rating <= 5):
+                return self.json_message("rating must be 1 to 5, or null", HTTPStatus.BAD_REQUEST)
         recipe = store.async_update(recipe_id, changes)
         if "title" in changes:
             await store.async_rename_media(recipe_id)
@@ -305,6 +314,64 @@ class RecipeRetryView(HomeAssistantView):
             return self.json_message("Not found", HTTPStatus.NOT_FOUND)
         data.processor.enqueue(recipe_id)
         return self.json({"ok": True})
+
+
+class RecipePhotosView(HomeAssistantView):
+    """Add a photo of the finished dish: the thumbnail if there is none yet, else a slide in the recipe."""
+
+    url = URL_API + "/{recipe_id}/photos"
+    name = "api:recipes:photos"
+
+    async def post(self, request: web.Request, recipe_id: str) -> web.Response:
+        """Store one image (multipart or raw body)."""
+        hass: HomeAssistant = request.app["hass"]
+        store = _data(hass).store
+        if recipe_id not in store.recipes:
+            return self.json_message("Not found", HTTPStatus.NOT_FOUND)
+        _, upload = await _read_payload(request)
+        if upload is None or _sniff(upload[1][:16]) in (None, ".pdf"):
+            return self.json_message("Send an image", HTTPStatus.BAD_REQUEST)
+        name = f"photo-{uuid.uuid4().hex[:8]}.jpg"
+        async with store.media_lock:
+            if recipe_id not in store.recipes:
+                return self.json_message("Not found", HTTPStatus.NOT_FOUND)
+            folder = store.media_dir(recipe_id)
+            ok = await hass.async_add_executor_job(video.save_image, upload[1], folder / name)
+            if not ok:
+                return self.json_message("That image format is not supported", HTTPStatus.BAD_REQUEST)
+            media = dict(store.recipes[recipe_id].get("media") or {})
+            if not media.get("image") and not media.get("poster"):
+                media["image"] = name  # no thumbnail yet: this one becomes it
+            else:
+                media["photos"] = [*(media.get("photos") or []), name]
+            recipe = store.async_update(recipe_id, {"media": media})
+        return self.json(serialize(hass, recipe, full=True), HTTPStatus.CREATED)
+
+
+class RecipePhotoView(HomeAssistantView):
+    """Remove one of your photos."""
+
+    url = URL_API + "/{recipe_id}/photos/{filename}"
+    name = "api:recipes:photo"
+
+    async def delete(self, request: web.Request, recipe_id: str, filename: str) -> web.Response:
+        """Delete a photo that was added in the app (never the downloaded video or poster)."""
+        hass: HomeAssistant = request.app["hass"]
+        store = _data(hass).store
+        if recipe_id not in store.recipes or not PHOTO_NAME.match(filename):
+            return self.json_message("Not found", HTTPStatus.NOT_FOUND)
+        async with store.media_lock:
+            media = dict(store.recipes[recipe_id].get("media") or {})
+            if filename in (media.get("photos") or []):
+                media["photos"] = [n for n in media["photos"] if n != filename]
+            elif media.get("image") == filename:
+                media.pop("image")
+            else:
+                return self.json_message("Not found", HTTPStatus.NOT_FOUND)
+            path = store.media_dir(recipe_id) / filename
+            await hass.async_add_executor_job(lambda: path.unlink(missing_ok=True))
+            recipe = store.async_update(recipe_id, {"media": media})
+        return self.json(serialize(hass, recipe, full=True))
 
 
 class RecipeShoppingView(HomeAssistantView):
@@ -617,7 +684,7 @@ def register_views(hass: HomeAssistant) -> None:
     """Register all HTTP views."""
     for view in (
         AppIndexView, ServiceWorkerView, ManifestView, RecipesListView, SettingsView,
-        RecipeView, RecipeRetryView, RecipeShoppingView, RecipeMediaView,
+        RecipeView, RecipeRetryView, RecipePhotosView, RecipePhotoView, RecipeShoppingView, RecipeMediaView,
         RecipeDebugView, RecipeDebugRerunView, RecipeDebugApplyView,
     ):
         hass.http.register_view(view())

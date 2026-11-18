@@ -57,6 +57,27 @@ pg = wait(r["id"])
 ok(pg["status"] == "ready" and pg["source"]["url"] == FIX + "/p/curry.html", f"page address found: {pg['source']} {pg.get('error')}")
 ok("page_text" not in pg and "input_text" not in pg and "page_jsonld" not in pg, "no page text leak")
 ok("page from the share sheet" in (pg.get("pipeline_notes") or []) and len(pg.get("shared") or "") < 200, f"page used without fetching {pg.get('pipeline_notes')}")
+# F3 rating and photos: a photo is the thumbnail when there is none, otherwise a slide
+s, r, _ = req("PATCH", f"/api/recipes/{a['id']}", {"rating": 4}); ok(s == 200 and r["rating"] == 4, f"rating saved {s}")
+s, r, _ = req("PATCH", f"/api/recipes/{a['id']}", {"rating": 9}); ok(s == 400, f"bad rating rejected {s}")
+ok(next(x for x in req("GET", "/api/recipes")[1]["recipes"] if x["id"] == a["id"])["rating"] == 4, "rating in the list")
+s, r, _ = req("PATCH", f"/api/recipes/{a['id']}", {"rating": None}); ok(s == 200 and r["rating"] is None, "rating cleared")
+def multipart(name):
+    b = uuid.uuid4().hex
+    body = (f"--{b}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{name}\"\r\nContent-Type: image/jpeg\r\n\r\n").encode() + open(DEV / "fixtures" / "dish.jpg", "rb").read() + f"\r\n--{b}--\r\n".encode()
+    return body, {"Content-Type": f"multipart/form-data; boundary={b}"}
+body, hdr = multipart("cooked.jpg")
+s, r, _ = req("POST", f"/api/recipes/{a['id']}/photos", body, headers=hdr)
+ok(s == 201 and len(r["photos"]) == 1 and r["media"]["image"] == "image.jpg", f"photo added as a slide {s} {r.get('photos') if isinstance(r, dict) else r}")
+s, pb, _ = req("GET", r["photos"][0]["url"], auth=False, raw=True); ok(s == 200 and pb[:2] == b"\xff\xd8", "photo is served signed")
+s, r2, _ = req("DELETE", f"/api/recipes/{a['id']}/photos/{r['photos'][0]['name']}"); ok(s == 200 and r2["photos"] == [], f"photo removed {s}")
+s, r3, _ = req("DELETE", f"/api/recipes/{a['id']}/photos/image.jpg"); ok(s == 404, f"downloaded image cannot be removed here {s}")
+s, r3, _ = req("POST", f"/api/recipes/{a['id']}/photos", b"not an image"); ok(s == 400, f"not an image rejected {s}")
+# a recipe without any picture: the first photo becomes its thumbnail
+s, t, _ = req("POST", "/api/recipes", {"text": "Plain soup\n2 cups water\n1 pinch salt\nBoil the water, add salt and serve warm please enjoy this soup.", "force": True}); nt = wait(t["id"])
+body, hdr = multipart("first.jpg")
+s, r4, _ = req("POST", f"/api/recipes/{nt['id']}/photos", body, headers=hdr)
+ok(s == 201 and r4["image_is_photo"] and r4["image_url"] and r4["photos"] == [], f"first photo becomes the thumbnail {s}")
 # G signed media + range, no auth
 s, body, h = req("GET", a["image_url"], auth=False, raw=True); ok(s == 200 and body[:2] == b"\xff\xd8", f"signed image no-auth {s}")
 s, body, h = req("GET", a["image_url"].split("?")[0], auth=False, raw=True); ok(s == 401, f"unsigned media blocked {s}")

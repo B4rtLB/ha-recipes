@@ -242,6 +242,25 @@ const ok = (c, m) => { console.log((c ? 'PASS ' : 'FAIL ') + m); if (!c) fails.p
   await page.evaluate(() => { location.hash = '#/'; });
   await page.waitForSelector('.pl-row');
 
+  // rating and your own photos
+  await page.click('.grid .card >> nth=0');
+  await page.waitForSelector('.detail .rating');
+  await page.click('[data-star="4"]');
+  ok((await page.$$eval('.star.on', (b) => b.length)) === 4, 'four stars are lit');
+  await page.waitForTimeout(400);
+  const chooser = page.waitForEvent('filechooser');
+  await page.click('[data-act="addphoto"]');
+  await (await chooser).setFiles(path.join(__dirname, 'fixtures', 'dish.jpg'));
+  await page.waitForSelector('.slides .slide img');
+  await page.locator('.photos').scrollIntoViewIfNeeded();
+  await page.waitForTimeout(500);
+  ok(await page.$eval('.slides img', (i) => i.naturalWidth > 0), 'photo slide shows the picture');
+  await shot('18-rating-photos');
+  await page.evaluate(() => history.back());
+  await page.waitForSelector('.pl-row');
+  ok((await page.$$eval('.grid .card-sub', (e) => e.map((x) => x.textContent))).some((t) => t.startsWith('★ 4')), 'rating shows on the card');
+  await shot('19-library-rating');
+
   // shuffle respects the filter chips
   const fchip = (await page.$$eval('[data-chip]', (b) => b.map((x) => x.dataset.chip).filter(Boolean)))[0];
   if (fchip) {

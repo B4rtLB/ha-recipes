@@ -40,6 +40,9 @@ const I = {
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 6.5h16M9 6.5V4.5h6v2M6.5 6.5l1 13h9l1-13"/></svg>',
   retry: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3L4.5 9"/><path d="M4.5 4v5h5"/></svg>',
   gear: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v2.2M12 19.3v2.2M4.6 4.6l1.6 1.6M17.8 17.8l1.6 1.6M2.5 12h2.2M19.3 12h2.2M4.6 19.4l1.6-1.6M17.8 6.2l1.6-1.6" stroke-linecap="round"/></svg>',
+  starOn: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4L2.8 9.5l6.4-.8z"/></svg>',
+  starOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 2.8l2.8 5.9 6.4.8-4.7 4.4 1.2 6.4L12 17.2l-5.7 3.1 1.2-6.4L2.8 9.5l6.4-.8z"/></svg>',
+  camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l1.5-2.5h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.6"/></svg>',
   share: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7.5 7.5L12 3l4.5 4.5"/><path d="M5 12v7.5h14V12"/></svg>',
   sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg>',
   pot: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10h16v6a4 4 0 0 1-4 4H8a4 4 0 0 1-4-4z"/><path d="M2 10h2M20 10h2M9 3.5c0 1.5 1 1.5 1 3M13 3.5c0 1.5 1 1.5 1 3"/></svg>',
@@ -297,7 +300,7 @@ function visibleRecipes() {
 }
 
 function cardHTML(r) {
-  const sub = [minutesLabel(r.total_min), PLATFORM[r.platform]].filter(Boolean).join(" · ");
+  const sub = [r.rating ? `★ ${r.rating}` : "", minutesLabel(r.total_min), PLATFORM[r.platform]].filter(Boolean).join(" · ");
   let state_ = "";
   const busy = r.status === "queued" || r.status === "processing";
   if (busy) state_ = `<div class="state glass dense"><span class="spinner"></span>${esc(r.progress || "Waiting")}</div>`;
@@ -650,6 +653,54 @@ function factsHTML(r) {
   return `<div class="facts">${facts.map(([k, v]) => `<div class="fact glass"><span class="k">${k}</span><span class="v">${v}</span></div>`).join("")}</div>`;
 }
 
+function ratingHTML(r) {
+  return `<div class="rating" role="group" aria-label="Your rating">${[1, 2, 3, 4, 5].map((n) =>
+    `<button class="star press ${n <= (r.rating || 0) ? "on" : ""}" data-star="${n}" aria-label="${n} star${n === 1 ? "" : "s"}" aria-pressed="${n <= (r.rating || 0)}">${n <= (r.rating || 0) ? I.starOn : I.starOff}</button>`).join("")}</div>`;
+}
+
+// Your own photos of the finished dish: a sliding row below the title. The first photo of a recipe
+// without a thumbnail became the thumbnail instead (it is in the row too, so it can be removed).
+function photosHTML(r) {
+  const own = [...(r.image_is_photo && r.image_url ? [{ name: (r.media || {}).image, url: r.image_url }] : []), ...(r.photos || [])];
+  if (r.status !== "ready") return "";
+  return `<section class="block photos"><div class="block-head"><h2>Photos</h2>
+      <button class="chip glass press" data-act="addphoto">${I.camera}<span>Add photo</span></button></div>
+    ${own.length ? `<div class="slides" id="slides">${own.map((p) => `<div class="slide"><img src="${esc(p.url)}" alt="" loading="lazy">
+      <button class="icon-btn glass press" data-delphoto="${esc(p.name)}" aria-label="Remove photo">${I.trash}</button></div>`).join("")}</div>
+    ${own.length > 1 ? `<div class="dots" id="dots">${own.map((_, i) => `<i class="${i ? "" : "on"}"></i>`).join("")}</div>` : ""}`
+    : `<div class="photo-empty">Add a photo of how it turned out.</div>`}</section>`;
+}
+
+function pickPhoto(r) {
+  const input = document.createElement("input");
+  input.type = "file"; input.accept = "image/*";
+  input.onchange = async () => {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    toast("Adding photo…");
+    const form = new FormData();
+    form.append("file", file, file.name || "photo.jpg");
+    try {
+      const res = await api("/" + r.id + "/photos", { method: "POST", body: form });
+      const item = (state.recipes || []).find((x) => x.id === r.id);
+      if (item) item.image_url = res.image_url;
+      renderDetail(r.id);
+      toast("Photo added");
+    } catch (err) { toast(err.message); }
+  };
+  input.click();
+}
+
+async function deletePhoto(r, name) {
+  if (!window.confirm("Remove this photo?")) return;
+  try {
+    const res = await api("/" + r.id + "/photos/" + encodeURIComponent(name), { method: "DELETE" });
+    const item = (state.recipes || []).find((x) => x.id === r.id);
+    if (item) item.image_url = res.image_url;
+    renderDetail(r.id);
+  } catch (err) { toast(err.message); }
+}
+
 function heroHTML(r) {
   const m = r.media || {};
   const portrait = m.width && m.height ? m.height / m.width > 1.1 : true;
@@ -668,7 +719,7 @@ function heroHTML(r) {
     </div>`;
   }
   if (poster) return `<div class="hero ${portrait ? "" : "square"}"><img class="poster" src="${esc(poster)}" alt=""><div class="top-fade"></div><div class="fade"></div></div>`;
-  return `<div class="hero square no-media">${genArt(r.title, true)}<div class="fade"></div></div>`;
+  return `<div class="hero square no-media">${genArt(r.title, true)}<div class="fade"></div>${r.status === "ready" ? `<button class="chip glass press hero-add" data-act="addphoto">${I.camera}<span>Add photo</span></button>` : ""}</div>`;
 }
 
 function ingredientsHTML(r, factor) {
@@ -758,11 +809,13 @@ function detailHTML(r) {
     <div class="head">
       ${eyebrow ? `<div class="eyebrow">${eyebrow}</div>` : ""}
       <h1 class="title" id="title">${esc(r.title || (busy ? "Saving recipe…" : "Untitled"))}</h1>
+      ${r.status === "ready" ? ratingHTML(r) : ""}
       ${r.description ? `<div class="desc">${esc(r.description)}</div>` : ""}
       ${factsHTML(r)}
       ${sourceLink(r)}
     </div>
     ${errorPanel}${busyPanel}
+    ${photosHTML(r)}
     ${(r.ingredient_groups || []).length ? `<section class="block">
       <div class="block-head"><h2>Ingredients</h2>
         ${servings ? `<div class="stepper glass"><button class="press" data-serv="-1" aria-label="Fewer servings">${I.minus}</button>
@@ -794,6 +847,26 @@ function bindDetail(r) {
     await api("/" + r.id, { method: "PATCH", body: { favorite: r.favorite } }).catch((err) => toast(err.message));
   };
   $('[data-act="retry"]')?.addEventListener("click", () => retry(r));
+  $$('[data-act="addphoto"]').forEach((b) => b.onclick = () => pickPhoto(r));
+  $$("[data-delphoto]").forEach((b) => b.onclick = () => deletePhoto(r, b.dataset.delphoto));
+  const slides = $("#slides");
+  if (slides && $("#dots")) {
+    slides.addEventListener("scroll", () => {
+      const i = Math.round(slides.scrollLeft / slides.clientWidth);
+      $$("#dots i").forEach((d, n) => d.classList.toggle("on", n === i));
+    }, { passive: true });
+  }
+  $$("[data-star]").forEach((b) => b.onclick = async () => {
+    const n = Number(b.dataset.star);
+    r.rating = r.rating === n ? null : n; // tapping the same star again clears it
+    $$("[data-star]").forEach((x) => {
+      const on = Number(x.dataset.star) <= (r.rating || 0);
+      x.classList.toggle("on", on); x.setAttribute("aria-pressed", on); x.innerHTML = on ? I.starOn : I.starOff;
+    });
+    const item = (state.recipes || []).find((x) => x.id === r.id);
+    if (item) item.rating = r.rating;
+    await api("/" + r.id, { method: "PATCH", body: { rating: r.rating } }).catch((err) => toast(err.message));
+  });
   $$("[data-tag]").forEach((b) => b.onclick = () => {
     setOnlyFilter(b.dataset.tag);
     state.tab = "all";
@@ -1160,6 +1233,7 @@ function openMoreSheet(r) {
   openSheet(`<div class="menu">
       ${url ? `<button data-m="open">${I.link}Open original</button>` : ""}
       ${navigator.share ? `<button data-m="share">${I.share}Share link</button>` : ""}
+      ${r.status === "ready" ? `<button data-m="photo">${I.camera}Add photo</button>` : ""}
       <button data-m="reset">${I.check}Uncheck ingredients and steps</button>
       <button data-m="retry">${I.retry}Read recipe again</button>
       ${state.admin ? `<button data-m="dev">${I.code}${Dev.el ? "Hide developer view" : "Developer"}</button>` : ""}
@@ -1171,6 +1245,7 @@ function openMoreSheet(r) {
       if (m === "open") window.open(url, "_blank");
       if (m === "share") navigator.share({ title: r.title, url }).catch(() => {});
       if (m === "reset") { store.set("checked." + r.id, []); store.set("steps." + r.id, []); renderDetail(r.id); }
+      if (m === "photo") pickPhoto(r);
       if (m === "retry") retry(r);
       if (m === "dev") Dev.toggle(r);
       if (m === "delete") removeRecipe(r);
