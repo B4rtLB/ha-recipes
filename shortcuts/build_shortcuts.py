@@ -76,7 +76,32 @@ def save_recipe():
     links = act("detect.link", WFInput=token_attachment(INPUT))
     g1 = uid()
     first = act("getitemfromlist", WFInput=token_attachment(out_ref(links, "URLs")), WFItemSpecifier="First Item")
-    dl_url = post(hook, "JSON", WFJSONValues=dict_field([("url", token_string(OBJ, [out_ref(first, "Item from List")]))]))
+    first_text = token_attachment(out_ref(first, "Item from List"))
+
+    def send_link():
+        """Only the link: Home Assistant downloads TikTok, Instagram and YouTube itself."""
+        dl = post(hook, "JSON", WFJSONValues=dict_field([("url", token_string(OBJ, [out_ref(first, "Item from List")]))]))
+        return [dl, *notify_from(dl, "Saved")]
+
+    def send_page():
+        """A web page: read it here on the phone (sites that block servers let the phone in) and send link + HTML."""
+        page = act("downloadurl", WFURL=token_string(OBJ, [out_ref(first, "Item from List")]), WFHTTPMethod="GET")
+        dl = post(hook, "JSON", WFJSONValues=dict_field([
+            ("url", token_string(OBJ, [out_ref(first, "Item from List")])),
+            ("text", token_string(OBJ, [out_ref(page, "Contents of URL")])),
+        ]))
+        return [page, dl, *notify_from(dl, "Saved")]
+
+    # social posts go as a link; any other link is read on the phone first
+    hosts = ("tiktok.com", "instagram.com", "youtu")
+    social = [uid() for _ in hosts]
+    chain = []
+    for gid, host in zip(social, hosts):
+        chain += [conditional(gid, 0, WFInput={"Type": "Variable", "Variable": first_text}, WFCondition=99,
+                              WFConditionalActionString=host), *send_link(), conditional(gid, 1)]
+    chain += send_page()
+    for gid in reversed(social):
+        chain.append(conditional(gid, 2))
     kind = act("getitemtype", WFInput=token_attachment(INPUT))
     g2 = uid()
     text_in = act("detect.text", WFInput=token_attachment(INPUT))
@@ -91,7 +116,7 @@ def save_recipe():
         hook,
         links,
         conditional(g1, 0, WFInput={"Type": "Variable", "Variable": token_attachment(out_ref(links, "URLs"))}, WFCondition=100),
-        first, dl_url, *notify_from(dl_url, "Saved"),
+        first, *chain,
         conditional(g1, 1),
         kind,
         conditional(g2, 0, WFInput={"Type": "Variable", "Variable": token_attachment(out_ref(kind, "Type"))},

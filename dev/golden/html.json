@@ -1,0 +1,23 @@
+{
+ "kind": "html",
+ "cases": [
+  {
+   "name": "blog post with a recipe card: story, menus and comments are cut",
+   "input": "<!DOCTYPE html><html><head><title>Vegan Gyros</title><script>var ads=1;</script><style>.a{}</style></head>\n<body><header><nav><a href=\"/\">Home</a><a href=\"/recipes\">Recipes</a></nav></header>\n<!-- cookie banner --><div class=\"cookie\">Cookies? Accept</div>\n<article><h1>Vegan Gyros with Tzatziki</h1><p>I have been making these for years and my whole family loves them. Here is the long story of how I found the spice mix on holiday in Greece.</p>\n<p>Share <a>Facebook</a> <a>Pinterest</a></p><button>Jump to recipe</button>\n<div class=\"wprm-recipe-container\"><h2 class=\"wprm-recipe-name\">Vegan Gyros</h2><a>Print Recipe</a><a>Pin Recipe</a>\n<div>Prep Time: 20 mins Cook Time: 30 mins</div><div>Servings: 4</div>\n<h3>Ingredients</h3><ul><li>400 g oyster mushrooms</li><li>2 tbsp olive oil</li><li>1 tsp smoked paprika</li></ul>\n<h3>Instructions</h3><ol><li>Tear the mushrooms and fry for 10 minutes.</li><li>Mix the tzatziki.</li></ol>\n<div>Notes: keeps 3 days.</div></div>\n<h2>12 Comments</h2><p>Great recipe! Loved it.</p></article>\n<aside>You may also like: Vegan Burgers</aside><footer>Copyright</footer><form><input></form></body></html>",
+   "expected": [
+    "Vegan Gyros with Tzatziki",
+    "Vegan Gyros",
+    "Prep Time: 20 mins Cook Time: 30 mins",
+    "Servings: 4",
+    "Ingredients",
+    "- 400 g oyster mushrooms",
+    "- 2 tbsp olive oil",
+    "- 1 tsp smoked paprika",
+    "Instructions",
+    "- Tear the mushrooms and fry for 10 minutes.",
+    "- Mix the tzatziki.",
+    "Notes: keeps 3 days."
+   ]
+  }
+ ]
+}

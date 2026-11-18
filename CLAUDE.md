@@ -27,7 +27,7 @@ Open work is in `TODO.md`.
 
 ## How a recipe is made
 
-1. The shortcut POSTs `{url}`, `{text}` or a file to the webhook. Some apps share a whole HTML page; `sources.best_url` finds the post link inside it, and the raw input is kept in `recipe["shared"]`.
+1. The shortcut POSTs `{url}`, `{text}` or a file to the webhook. For a web link (not TikTok/Instagram/YouTube) the shortcut downloads the page on the phone and sends `{url, text: <html>}`, so sites that block servers work; `new_recipe_from_payload` then keeps only the recipe text/photo/JSON-LD (`page_text`, `page_image`, `page_jsonld`, never served) and the pipeline skips fetching. `sources.html_to_text` (page without JSON-LD) starts at the recipe card, drops menus, share lines, repeats and comments, max 12k chars. Some apps share a whole HTML page; `sources.best_url` finds the post link inside it, and the raw input is kept in `recipe["shared"]`.
 2. `pipeline.process`:
    - **Social:** yt-dlp without cookies, then with Instagram cookies, then og-meta caption. The audio is transcribed when the caption is short or doesn't look like a recipe.
    - **Web:** JSON-LD or page text.

@@ -268,15 +268,15 @@ class RecipeProcessor:
         elif url and not recipe.get("input_text"):
             self._set(recipe_id, progress="Reading web page")
             with dbg.step("web"):
-                try:
-                    web = await sources.fetch_web(self.session, url)
-                except (aiohttp.ClientError, TimeoutError) as err:
-                    if not recipe.get("page_text"):
-                        raise
-                    # the site blocks the server: use the page the phone shared
+                if recipe.get("page_text"):
+                    # the page came from the phone with the share: no need to fetch it again
                     notes.append("page from the share sheet")
-                    dbg.data["web_error"] = str(err)
-                    web = sources.SourceContent(text=recipe["page_text"], canonical_url=url)
+                    web = sources.SourceContent(
+                        text=recipe["page_text"], canonical_url=url,
+                        image_url=recipe.get("page_image"), jsonld=recipe.get("page_jsonld"),
+                    )
+                else:
+                    web = await sources.fetch_web(self.session, url)
             dbg.data["web_text"] = web.text
             if web.jsonld:
                 dbg.data["jsonld"] = sources.slim_jsonld(web.jsonld)
@@ -647,13 +647,18 @@ def new_recipe_from_payload(
     shared = "\n".join(x for x in (raw_url, text) if x).strip()
     if url and text.strip() == url:
         text = ""
-    page_text = ""
-    if url and sources._is_html(text):  # the share sheet sent the whole page: read its recipe, not its scripts
+    page: dict[str, Any] = {}
+    if url and sources._is_html(text):
+        # The phone sent the page itself (the shortcut reads it there, so sites that block servers work):
+        # keep only its recipe text, photo and recipe data, never the scripts and ads around them.
         try:
-            page_text = sources.content_from_html(text, url).text[:30000]
-        except Exception:  # noqa: BLE001 - only a fallback for when the site blocks the server
-            page_text = ""
+            content = sources.content_from_html(text, url)
+            page = {"page_text": content.text, "page_image": content.image_url, "page_jsonld": content.jsonld}
+        except Exception:  # noqa: BLE001 - then the server fetches the page itself
+            page = {}
         text = ""
+        if page:
+            shared = raw_url.strip() or url  # not the page itself: it can be a megabyte of scripts
     if url and not payload.get("force") and (existing := store.find_by_url(url)):
         return existing, False
 
@@ -663,8 +668,7 @@ def new_recipe_from_payload(
         data["shared"] = shared[:6000]
     if url:
         data["source"] = {"url": url, "platform": sources.detect_platform(url)}
-    if page_text:
-        data["page_text"] = page_text
+    data.update({k: v for k, v in page.items() if v})
     if text and len(text) > 40 and (not url or len(text) > len(url) + 40):
         # Shared text that contains a recipe (e.g. copied from somewhere)
         data["input_text"] = text

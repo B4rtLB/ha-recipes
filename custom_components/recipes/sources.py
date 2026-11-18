@@ -327,16 +327,66 @@ def meta_content(html: str, *names: str) -> str | None:
     return None
 
 
-def html_to_text(html: str, limit: int = 30000) -> str:
-    """Very small readability: drop scripts/nav and keep visible text."""
-    body = re.sub(r"(?is)<(script|style|noscript|svg|nav|footer|header|form|iframe)[^>]*>.*?</\1>", " ", html)
-    body = re.sub(r"(?i)<br\s*/?>|</(p|div|li|h[1-6]|tr)>", "\n", body)
+# Where the recipe card of the common recipe plugins starts (everything before it is the blog post).
+_CARD_START = re.compile(
+    r"""<[a-z0-9]+[^>]*(?:class|id)=["'][^"']*(?:wprm-recipe-container|tasty-recipes|mv-create-wrapper|recipe-card|"""
+    r"""easyrecipe|jetpack-recipe|recipe-callout|innerrecipe)[^"']*["']""",
+    re.IGNORECASE,
+)
+_ITEMPROP_RECIPE = re.compile(r"itemtype=[\"'][^\"']*schema.org/Recipe", re.IGNORECASE)
+# Lines that are page furniture, not recipe.
+_NOISE_LINE = re.compile(
+    r"^(?:(?:print|pin|share|save|email|rate|jump to|recipe|video|this)(?: (?:print|pin|share|save|email|rate|to|recipe|video|this|on|it))*|print recipe|pin(?: recipe)?|share|save|jump to (?:recipe|video)|skip to (?:content|recipe)|"
+    r"subscribe|sign up|newsletter|rate(?: this recipe)?|tap to rate|cookies?|accept|menu|search|home|"
+    r"follow us|facebook|instagram|pinterest|twitter|x|tiktok|youtube|email|reply|log in|leave a (?:comment|reply)|"
+    r"\d+ ratings?|\(?\d+(?:\.\d+)?\)?|[-•·|/]+)$",
+    re.IGNORECASE,
+)
+# Below these the page is comments, related posts and the footer.
+_TAIL = re.compile(
+    r"^(?:\d+ comments?|comments?|leave a (?:comment|reply)|related (?:recipes|posts)|you (?:may|might) also (?:like|love)|"
+    r"more (?:recipes|from)|recommended|popular (?:recipes|posts)|about (?:me|the author)|subscribe to)\b",
+    re.IGNORECASE,
+)
+
+
+def html_to_text(html: str, limit: int = 12000) -> str:
+    """The readable recipe text of a page, small enough to be cheap for the AI.
+
+    Drops scripts, styles, menus, forms and comments; starts at the recipe card of the common
+    plugins when there is one (the blog story above it is not needed); removes buttons,
+    share links, repeated lines and everything from "Comments" / "Related recipes" on.
+    """
+    body = re.sub(r"(?s)<!--.*?-->", " ", html)
+    body = re.sub(
+        r"(?is)<(script|style|noscript|svg|nav|footer|header|aside|form|iframe|button|select|template|dialog|picture)\b[^>]*>.*?</\1>",
+        " ",
+        body,
+    )
+    start = _CARD_START.search(body) or _ITEMPROP_RECIPE.search(body)
+    title = ""
+    if start and start.start() > 0:
+        if m := re.search(r"(?is)<h1\b[^>]*>(.*?)</h1>", body[: start.start()]):
+            title = re.sub(r"<[^>]+>", " ", m.group(1))
+        body = body[start.start():]
+    body = re.sub(r"(?i)<br\s*/?>|</(p|div|li|h[1-6]|tr|section|ul|ol)>", "\n", body)
     body = re.sub(r"(?i)<li[^>]*>", "\n- ", body)
     body = re.sub(r"<[^>]+>", " ", body)
     body = html_lib.unescape(body)
-    lines = [re.sub(r"[ \t\xa0]+", " ", line).strip() for line in body.splitlines()]
-    text = "\n".join(line for line in lines if line)
-    return text[:limit]
+    lines: list[str] = []
+    seen: set[str] = set()
+    for raw in ([title] if title.strip() else []) + body.splitlines():
+        line = re.sub(r"[ \t\xa0]+", " ", raw).strip()
+        if not line or _NOISE_LINE.match(line):
+            continue
+        if lines and _TAIL.match(line):
+            break
+        key = line.lower()
+        if key in seen and len(line) > 3:
+            continue
+        seen.add(key)
+        lines.append(line)
+    return "\n".join(lines)[:limit]
 
 
 async def fetch_web(session: aiohttp.ClientSession, url: str) -> SourceContent:

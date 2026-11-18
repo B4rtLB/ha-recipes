@@ -55,7 +55,8 @@ page = ('<!DOCTYPE html><html><head><script src="https://config.aps.amazon-adsys
 s, r, _ = req("POST", "/api/recipes", {"text": page, "force": True}); ok(s in (200, 201), f"whole page shared {s}")
 pg = wait(r["id"])
 ok(pg["status"] == "ready" and pg["source"]["url"] == FIX + "/p/curry.html", f"page address found: {pg['source']} {pg.get('error')}")
-ok("page_text" not in pg and "input_text" not in pg, "no page text leak")
+ok("page_text" not in pg and "input_text" not in pg and "page_jsonld" not in pg, "no page text leak")
+ok("page from the share sheet" in (pg.get("pipeline_notes") or []) and len(pg.get("shared") or "") < 200, f"page used without fetching {pg.get('pipeline_notes')}")
 # G signed media + range, no auth
 s, body, h = req("GET", a["image_url"], auth=False, raw=True); ok(s == 200 and body[:2] == b"\xff\xd8", f"signed image no-auth {s}")
 s, body, h = req("GET", a["image_url"].split("?")[0], auth=False, raw=True); ok(s == 401, f"unsigned media blocked {s}")

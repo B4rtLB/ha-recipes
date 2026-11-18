@@ -56,6 +56,11 @@ def run(kind, case):
         return preprocess.prepare(value)
     if kind == "jsonld":
         return jsonld_case(value)
+    if kind == "html":
+        sys.path.insert(0, str(ROOT.parent.parent))
+        from custom_components.recipes import sources  # noqa: PLC0415
+
+        return sources.html_to_text(value).split("\n")
     raise SystemExit(f"unknown kind {kind}")
 
 
