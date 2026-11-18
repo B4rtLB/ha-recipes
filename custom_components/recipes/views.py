@@ -73,7 +73,7 @@ def serialize(hass: HomeAssistant, recipe: dict[str, Any], *, full: bool) -> dic
     image = media.get("image") or media.get("poster")
     out: dict[str, Any]
     if full:
-        out = {k: v for k, v in recipe.items() if k not in ("input_text", "upload")}
+        out = {k: v for k, v in recipe.items() if k not in ("input_text", "upload", "page_text")}
         if recipe.get("status") == "error" and recipe.get("input_text"):
             out["original_text"] = recipe["input_text"][:5000]
     else:

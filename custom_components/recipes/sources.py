@@ -73,12 +73,47 @@ def is_post_url(url: str) -> bool:
     return False
 
 
+def _is_html(text: str) -> bool:
+    head = (text or "")[:3000].lower()
+    return "<html" in head or "<!doctype" in head or "<head" in head or "<script" in head
+
+
+def page_url(text: str | None) -> str | None:
+    """The address of a shared web page, read from the page itself.
+
+    Safari can share the whole page instead of its link. The page names itself in its canonical
+    link or og:url; failing that, its own address is the link that comes back most often (the
+    recipe card links to "#step" anchors of itself). Script, style and ad links are ignored.
+    """
+    text = (text or "").replace('\\"', '"')
+    if not _is_html(text):
+        return None
+    for pattern in (
+        r"<link[^>]+rel=[\"']canonical[\"'][^>]*href=[\"']([^\"']+)",
+        r"<link[^>]+href=[\"']([^\"']+)[\"'][^>]*rel=[\"']canonical[\"']",
+        r"<meta[^>]+property=[\"']og:url[\"'][^>]*content=[\"']([^\"']+)",
+        r"<meta[^>]+content=[\"']([^\"']+)[\"'][^>]*property=[\"']og:url[\"']",
+    ):
+        if (m := re.search(pattern, text, re.IGNORECASE)) and m.group(1).startswith("http") and not is_asset_url(m.group(1)):
+            return html_lib.unescape(m.group(1))
+    body = re.sub(r"<(?:script|link|img|source|iframe)\b[^>]*>", " ", text, flags=re.IGNORECASE)
+    counts: dict[str, int] = {}
+    for url in all_urls(body):
+        key = url.split("#", 1)[0]
+        counts[key] = counts.get(key, 0) + 1
+    ranked = [u for u, n in sorted(counts.items(), key=lambda x: -x[1]) if urlsplit(u).path.strip("/")]
+    return ranked[0] if ranked and counts[ranked[0]] >= 3 else None
+
+
 def best_url(*texts: str | None) -> str | None:
     """Pick the recipe link out of everything that was shared.
 
-    Script/image/CDN links are skipped; a TikTok/Instagram/YouTube post wins
-    over other links, otherwise the first remaining link is used.
+    A whole shared web page names itself (`page_url`). Otherwise script/image/CDN links are
+    skipped, a TikTok/Instagram/YouTube post wins over other links, and the first remaining link is used.
     """
+    for text in texts:
+        if own := page_url(text):
+            return own
     found = all_urls(*texts)
     posts = [u for u in found if is_post_url(u)]
     if posts:
@@ -318,6 +353,16 @@ async def fetch_web(session: aiohttp.ClientSession, url: str) -> SourceContent:
                 html = desktop_html
         except aiohttp.ClientError:
             pass
+    return content_from_html(html, final_url, content, recipe)
+
+
+def content_from_html(
+    html: str, final_url: str, content: SourceContent | None = None, recipe: dict[str, Any] | None = None
+) -> SourceContent:
+    """Title, photo and the recipe text (JSON-LD if the page has it) of a page's HTML."""
+    content = content or SourceContent(canonical_url=final_url)
+    if recipe is None:
+        recipe = find_jsonld_recipe(html)
     content.title = meta_content(html, "og:title", "twitter:title")
     content.image_url = meta_content(html, "og:image", "twitter:image")
     if recipe is not None:

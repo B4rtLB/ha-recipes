@@ -48,6 +48,14 @@ ok(a["total_min"] == 35 and a["steps"][1]["timers"][0]["seconds"] == 600, f"tota
 ok("input_text" not in a, "no input_text leak")
 # F duplicate
 s, r2, _ = req("POST", "/api/recipes", {"url": FIX + "/p/curry.html/"}); ok(r2["created"] is False and r2["id"] == a["id"], "duplicate detected")
+# F2 the share sheet sends a whole web page: its own address is found, the scripts and ads are not read
+page = ('<!DOCTYPE html><html><head><script src="https://config.aps.amazon-adsystem.com/configs/abc"></script>'
+        f'<link rel="canonical" href="{FIX}/p/curry.html" /></head><body><a href="https://yoast.com/product/seo/">ad</a>'
+        + "<p>junk</p>" * 200 + "</body></html>")
+s, r, _ = req("POST", "/api/recipes", {"text": page, "force": True}); ok(s in (200, 201), f"whole page shared {s}")
+pg = wait(r["id"])
+ok(pg["status"] == "ready" and pg["source"]["url"] == FIX + "/p/curry.html", f"page address found: {pg['source']} {pg.get('error')}")
+ok("page_text" not in pg and "input_text" not in pg, "no page text leak")
 # G signed media + range, no auth
 s, body, h = req("GET", a["image_url"], auth=False, raw=True); ok(s == 200 and body[:2] == b"\xff\xd8", f"signed image no-auth {s}")
 s, body, h = req("GET", a["image_url"].split("?")[0], auth=False, raw=True); ok(s == 401, f"unsigned media blocked {s}")

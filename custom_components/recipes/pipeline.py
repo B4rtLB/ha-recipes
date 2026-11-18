@@ -268,7 +268,15 @@ class RecipeProcessor:
         elif url and not recipe.get("input_text"):
             self._set(recipe_id, progress="Reading web page")
             with dbg.step("web"):
-                web = await sources.fetch_web(self.session, url)
+                try:
+                    web = await sources.fetch_web(self.session, url)
+                except (aiohttp.ClientError, TimeoutError) as err:
+                    if not recipe.get("page_text"):
+                        raise
+                    # the site blocks the server: use the page the phone shared
+                    notes.append("page from the share sheet")
+                    dbg.data["web_error"] = str(err)
+                    web = sources.SourceContent(text=recipe["page_text"], canonical_url=url)
             dbg.data["web_text"] = web.text
             if web.jsonld:
                 dbg.data["jsonld"] = sources.slim_jsonld(web.jsonld)
@@ -586,11 +594,16 @@ class RecipeProcessor:
                     "notify", "send_message", {"entity_id": service, "title": title, "message": message}, blocking=False
                 )
                 return
-            await self.hass.services.async_call(
-                domain, name, {"title": title, "message": message, "data": {"tag": f"recipe-{recipe_id}"}}, blocking=False
-            )
+            # a notify service; the phone's own is called notify.mobile_app_<device>, so that is tried too
+            for candidate in (name, f"mobile_app_{name}"):
+                if self.hass.services.has_service(domain, candidate):
+                    await self.hass.services.async_call(
+                        domain, candidate, {"title": title, "message": message, "data": {"tag": f"recipe-{recipe_id}"}}, blocking=False
+                    )
+                    return
+            _LOGGER.warning("Notification not sent: no notify entity or service called %s (Settings → Notify)", service)
         except Exception as err:  # never fail a recipe on a notification
-            _LOGGER.debug("Notification failed: %s", err)
+            _LOGGER.warning("Notification failed: %s", err)
 
 
 def friendly_error(err: Exception) -> str:
@@ -634,6 +647,13 @@ def new_recipe_from_payload(
     shared = "\n".join(x for x in (raw_url, text) if x).strip()
     if url and text.strip() == url:
         text = ""
+    page_text = ""
+    if url and sources._is_html(text):  # the share sheet sent the whole page: read its recipe, not its scripts
+        try:
+            page_text = sources.content_from_html(text, url).text[:30000]
+        except Exception:  # noqa: BLE001 - only a fallback for when the site blocks the server
+            page_text = ""
+        text = ""
     if url and not payload.get("force") and (existing := store.find_by_url(url)):
         return existing, False
 
@@ -643,6 +663,8 @@ def new_recipe_from_payload(
         data["shared"] = shared[:6000]
     if url:
         data["source"] = {"url": url, "platform": sources.detect_platform(url)}
+    if page_text:
+        data["page_text"] = page_text
     if text and len(text) > 40 and (not url or len(text) > len(url) + 40):
         # Shared text that contains a recipe (e.g. copied from somewhere)
         data["input_text"] = text
